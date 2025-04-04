@@ -1,17 +1,17 @@
 "use client"
 import { useState } from "react";
 
-const schema = {
-  commentary: "To create a simple photo gallery app, I will use the Next.js template and create a Gallery component. The component will display a grid of images and allow users to upload new images.",
-  template: "nextjs-developer",
-  title: "Photo Gallery",
-  description: "A simple photo gallery app built with Next.js and TypeScript.",
-  additional_dependencies: [],
-  has_additional_dependencies: false,
-  install_dependencies_command: "",
-  port: 3000,
-  file_path: "pages/index.tsx",
-}
+// const schema = {
+//   commentary: "To create a simple photo gallery app, I will use the Next.js template and create a Gallery component. The component will display a grid of images and allow users to upload new images.",
+//   template: "nextjs-developer",
+//   title: "Photo Gallery",
+//   description: "A simple photo gallery app built with Next.js and TypeScript.",
+//   additional_dependencies: [],
+//   has_additional_dependencies: false,
+//   install_dependencies_command: "",
+//   port: 3000,
+//   file_path: "pages/index.tsx",
+// }
 
 const images = [
   { id: 1, url: "/image1.jpg" },
