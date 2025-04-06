@@ -1,263 +1,210 @@
 "use client"
 
 import { useState } from "react"
-import { Pencil, Trash2, BookOpen, Plus, Save, X } from "lucide-react"
+import { Trash2, Edit, Plus, Save, CheckCircle, Circle, ClipboardList } from "lucide-react"
 
-interface Book {
-  id: number
-  title: string
-  author: string
-  quantity: number
-}
-
-export default function BookstoreDashboard() {
-  const [books, setBooks] = useState<Book[]>([
-    { id: 1, title: "The Great Gatsby", author: "F. Scott Fitzgerald", quantity: 15 },
-    { id: 2, title: "To Kill a Mockingbird", author: "Harper Lee", quantity: 22 },
-    { id: 3, title: "1984", author: "George Orwell", quantity: 18 },
+const NotesApp = () => {
+  const [notes, setNotes] = useState([
+    { id: 1, text: "Buy groceries", completed: false },
+    { id: 2, text: "Do laundry", completed: false },
   ])
+  const [newNote, setNewNote] = useState("")
+  const [updateNoteId, setUpdateNoteId] = useState<number | null>(null)
+  const [updateNoteText, setUpdateNoteText] = useState("")
 
-  const [newBook, setNewBook] = useState<Omit<Book, "id">>({ title: "", author: "", quantity: 0 })
-  const [updateBook, setUpdateBook] = useState<Book | null>(null)
-
-  const handleAddBook = () => {
-    if (newBook.title && newBook.author && newBook.quantity > 0) {
-      const maxId = books.length > 0 ? Math.max(...books.map((book) => book.id)) : 0
-      setBooks([...books, { id: maxId + 1, ...newBook }])
-      setNewBook({ title: "", author: "", quantity: 0 })
+  const addNote = () => {
+    if (newNote.trim() !== "") {
+      const newNotes = [...notes, { id: notes.length + 1, text: newNote, completed: false }]
+      setNotes(newNotes)
+      setNewNote("")
     }
   }
 
-  const handleUpdateBook = (book: Book) => {
-    setUpdateBook(book)
+  const deleteNote = (id: number) => {
+    const newNotes = notes.filter((note) => note.id !== id)
+    setNotes(newNotes)
   }
 
-  const handleSaveUpdate = () => {
-    if (updateBook && updateBook.title && updateBook.author && updateBook.quantity > 0) {
-      const updatedBooks = books.map((book) => (book.id === updateBook.id ? updateBook : book))
-      setBooks(updatedBooks)
-      setUpdateBook(null)
+  const updateNote = (id: number) => {
+    setUpdateNoteId(id)
+    const noteToUpdate = notes.find((note) => note.id === id)
+    if (noteToUpdate) {
+      setUpdateNoteText(noteToUpdate.text)
     }
   }
 
-  const handleDeleteBook = (id: number) => {
-    const filteredBooks = books.filter((book) => book.id !== id)
-    setBooks(filteredBooks)
+  const saveUpdateNote = () => {
+    if (updateNoteId !== null && updateNoteText.trim() !== "") {
+      const newNotes = notes.map((note) => {
+        if (note.id === updateNoteId) {
+          return { ...note, text: updateNoteText }
+        }
+        return note
+      })
+      setNotes(newNotes)
+      setUpdateNoteId(null)
+      setUpdateNoteText("")
+    }
   }
 
-  // Find the maximum quantity for scaling the chart
-  const maxQuantity = Math.max(...books.map((book) => book.quantity), 1)
+  const toggleCompleted = (id: number) => {
+    const newNotes = notes.map((note) => {
+      if (note.id === id) {
+        return { ...note, completed: !note.completed }
+      }
+      return note
+    })
+    setNotes(newNotes)
+  }
+
+  const filteredNotes = notes.filter((note) => note.completed)
+  const activeNotes = notes.filter((note) => !note.completed)
 
   return (
-    <div className="container mx-auto p-6 space-y-8 max-w-6xl">
-      <header className="border-b pb-4">
-        <h1 className="text-3xl font-bold text-teal-600 flex items-center gap-2">
-          <BookOpen className="h-8 w-8" />
-          Bookstore Dashboard
-        </h1>
-      </header>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Add/Update Book Form Card */}
-        <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
-          <div className="border-b p-4">
-            <h2 className="text-xl font-semibold text-teal-600">{updateBook ? "Update Book" : "Add New Book"}</h2>
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-50 p-4 md:p-8">
+      <div className="max-w-3xl mx-auto bg-white rounded-xl shadow-lg overflow-hidden">
+        <div className="bg-gradient-to-r from-purple-600 to-indigo-600 p-6">
+          <div className="flex items-center justify-center">
+            <ClipboardList className="h-8 w-8 text-white mr-3" />
+            <h1 className="text-3xl font-bold text-white">Notes App</h1>
           </div>
-          <div className="p-6">
-            {updateBook ? (
-              <div className="space-y-4">
-                <div>
-                  <label htmlFor="update-title" className="text-sm font-medium block mb-1">
-                    Title
-                  </label>
-                  <input
-                    id="update-title"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                    placeholder="Book title"
-                    value={updateBook.title}
-                    onChange={(e) => setUpdateBook({ ...updateBook, title: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label htmlFor="update-author" className="text-sm font-medium block mb-1">
-                    Author
-                  </label>
-                  <input
-                    id="update-author"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                    placeholder="Author name"
-                    value={updateBook.author}
-                    onChange={(e) => setUpdateBook({ ...updateBook, author: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label htmlFor="update-quantity" className="text-sm font-medium block mb-1">
-                    Quantity
-                  </label>
-                  <input
-                    id="update-quantity"
-                    type="number"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                    placeholder="Quantity"
-                    value={updateBook.quantity}
-                    onChange={(e) => setUpdateBook({ ...updateBook, quantity: Number(e.target.value) })}
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    className={`flex-1 px-4 py-2 rounded-md flex items-center justify-center gap-2 text-white bg-teal-600 hover:bg-teal-700 transition-colors ${
-                      !updateBook.title || !updateBook.author || updateBook.quantity <= 0
-                        ? "opacity-50 cursor-not-allowed"
-                        : ""
-                    }`}
-                    onClick={handleSaveUpdate}
-                    disabled={!updateBook.title || !updateBook.author || updateBook.quantity <= 0}
-                  >
-                    <Save className="h-4 w-4" /> Save Changes
-                  </button>
-                  <button
-                    className="flex-1 px-4 py-2 rounded-md border border-gray-300 hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
-                    onClick={() => setUpdateBook(null)}
-                  >
-                    <X className="h-4 w-4" /> Cancel
-                  </button>
-                </div>
-              </div>
+        </div>
+
+        <div className="p-6">
+          <div className="flex flex-col md:flex-row gap-2 mb-6">
+            <input
+              type="text"
+              value={newNote}
+              onChange={(e) => setNewNote(e.target.value)}
+              className="flex-grow p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
+              placeholder="Add new note"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") addNote()
+              }}
+            />
+            <button
+              onClick={addNote}
+              className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-medium py-3 px-6 rounded-lg transition-all flex items-center justify-center"
+            >
+              <Plus className="h-5 w-5 mr-2" />
+              Add Note
+            </button>
+          </div>
+
+          <div className="mb-8">
+            <h2 className="text-xl font-semibold mb-4 text-gray-800 flex items-center">
+              <Circle className="h-5 w-5 mr-2 text-purple-600" />
+              Active Notes
+            </h2>
+            {activeNotes.length === 0 ? (
+              <p className="text-gray-500 italic text-center py-4">No active notes. Add one above!</p>
             ) : (
-              <div className="space-y-4">
-                <div>
-                  <label htmlFor="new-title" className="text-sm font-medium block mb-1">
-                    Title
-                  </label>
-                  <input
-                    id="new-title"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                    placeholder="Book title"
-                    value={newBook.title}
-                    onChange={(e) => setNewBook({ ...newBook, title: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label htmlFor="new-author" className="text-sm font-medium block mb-1">
-                    Author
-                  </label>
-                  <input
-                    id="new-author"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                    placeholder="Author name"
-                    value={newBook.author}
-                    onChange={(e) => setNewBook({ ...newBook, author: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label htmlFor="new-quantity" className="text-sm font-medium block mb-1">
-                    Quantity
-                  </label>
-                  <input
-                    id="new-quantity"
-                    type="number"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                    placeholder="Quantity"
-                    value={newBook.quantity}
-                    onChange={(e) => setNewBook({ ...newBook, quantity: Number(e.target.value) })}
-                  />
-                </div>
-                <button
-                  className={`w-full px-4 py-2 rounded-md flex items-center justify-center gap-2 text-white bg-teal-600 hover:bg-teal-700 transition-colors ${
-                    !newBook.title || !newBook.author || newBook.quantity <= 0 ? "opacity-50 cursor-not-allowed" : ""
-                  }`}
-                  onClick={handleAddBook}
-                  disabled={!newBook.title || !newBook.author || newBook.quantity <= 0}
-                >
-                  <Plus className="h-4 w-4" /> Add Book
-                </button>
-              </div>
+              <ul className="space-y-3">
+                {activeNotes.map((note) => (
+                  <li
+                    key={note.id}
+                    className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-all"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center flex-grow">
+                        <button
+                          onClick={() => toggleCompleted(note.id)}
+                          className="mr-3 text-gray-400 hover:text-purple-600 transition-colors"
+                        >
+                          <Circle className="h-5 w-5" />
+                        </button>
+
+                        {updateNoteId === note.id ? (
+                          <input
+                            type="text"
+                            value={updateNoteText}
+                            onChange={(e) => setUpdateNoteText(e.target.value)}
+                            className="flex-grow p-2 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") saveUpdateNote()
+                            }}
+                          />
+                        ) : (
+                          <span className="text-gray-800">{note.text}</span>
+                        )}
+                      </div>
+
+                      <div className="flex space-x-2 ml-4">
+                        {updateNoteId === note.id ? (
+                          <button
+                            onClick={saveUpdateNote}
+                            className="p-2 text-green-600 hover:bg-green-50 rounded-full transition-colors"
+                            title="Save"
+                          >
+                            <Save className="h-5 w-5" />
+                          </button>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => updateNote(note.id)}
+                              className="p-2 text-amber-600 hover:bg-amber-50 rounded-full transition-colors"
+                              title="Edit"
+                            >
+                              <Edit className="h-5 w-5" />
+                            </button>
+                            <button
+                              onClick={() => deleteNote(note.id)}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-full transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 className="h-5 w-5" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
-        </div>
 
-        {/* Chart Card */}
-        <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
-          <div className="border-b p-4">
-            <h2 className="text-xl font-semibold text-teal-600">Book Inventory Chart</h2>
-          </div>
-          <div className="p-6 h-[300px]">
-            <div className="h-full flex flex-col">
-              <div className="flex-1 flex items-end gap-2 pb-2">
-                {books.map((book) => (
-                  <div key={book.id} className="flex flex-col items-center flex-1">
-                    <div
-                      className="w-full bg-teal-500 rounded-t-md transition-all duration-300"
-                      style={{
-                        height: `${(book.quantity / maxQuantity) * 100}%`,
-                        minHeight: "10px",
-                      }}
-                    />
-                    <div className="text-xs font-medium mt-1 truncate w-full text-center">{book.title}</div>
-                    <div className="text-xs text-gray-500">{book.quantity}</div>
-                  </div>
+          <div>
+            <h2 className="text-xl font-semibold mb-4 text-gray-800 flex items-center border-t pt-6">
+              <CheckCircle className="h-5 w-5 mr-2 text-green-600" />
+              Completed Notes
+            </h2>
+            {filteredNotes.length === 0 ? (
+              <p className="text-gray-500 italic text-center py-4">No completed notes yet.</p>
+            ) : (
+              <ul className="space-y-3">
+                {filteredNotes.map((note) => (
+                  <li key={note.id} className="bg-gray-50 border border-gray-200 rounded-lg p-4 shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <button onClick={() => toggleCompleted(note.id)} className="mr-3 text-green-600">
+                          <CheckCircle className="h-5 w-5" />
+                        </button>
+                        <span className="text-gray-500 line-through">{note.text}</span>
+                      </div>
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => deleteNote(note.id)}
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-full transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 className="h-5 w-5" />
+                        </button>
+                      </div>
+                    </div>
+                  </li>
                 ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Books Table Card */}
-      <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
-        <div className="border-b p-4">
-          <h2 className="text-xl font-semibold text-teal-600">Book Inventory</h2>
-        </div>
-        <div className="p-6">
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="bg-gray-50 border-b">
-                  <th className="text-left py-3 px-4 font-semibold text-sm">Title</th>
-                  <th className="text-left py-3 px-4 font-semibold text-sm">Author</th>
-                  <th className="text-right py-3 px-4 font-semibold text-sm">Quantity</th>
-                  <th className="text-right py-3 px-4 font-semibold text-sm">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {books.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="text-center py-6 text-gray-500">
-                      No books in inventory. Add your first book above.
-                    </td>
-                  </tr>
-                ) : (
-                  books.map((book) => (
-                    <tr key={book.id} className="border-b hover:bg-gray-50">
-                      <td className="py-3 px-4 font-medium">{book.title}</td>
-                      <td className="py-3 px-4">{book.author}</td>
-                      <td className="py-3 px-4 text-right">{book.quantity}</td>
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex justify-end gap-2">
-                          <button
-                            onClick={() => handleUpdateBook(book)}
-                            className="h-8 w-8 p-0 flex items-center justify-center rounded-md border border-gray-300 hover:bg-gray-50 transition-colors"
-                          >
-                            <Pencil className="h-4 w-4" />
-                            <span className="sr-only">Edit</span>
-                          </button>
-                          <button
-                            onClick={() => handleDeleteBook(book.id)}
-                            className="h-8 w-8 p-0 flex items-center justify-center rounded-md bg-red-500 text-white hover:bg-red-600 transition-colors"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                            <span className="sr-only">Delete</span>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+              </ul>
+            )}
           </div>
         </div>
       </div>
     </div>
   )
 }
+
+export default NotesApp
+
+
+
