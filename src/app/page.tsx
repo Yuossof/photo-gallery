@@ -1,210 +1,290 @@
 "use client"
 
+import type React from "react"
+
 import { useState } from "react"
-import { Trash2, Edit, Plus, Save, CheckCircle, Circle, ClipboardList } from "lucide-react"
+import { ClipboardList, Package, Users, Clock, CheckCircle2, Loader2, ChevronDown } from "lucide-react"
 
-const NotesApp = () => {
-  const [notes, setNotes] = useState([
-    { id: 1, text: "Buy groceries", completed: false },
-    { id: 2, text: "Do laundry", completed: false },
+// Define types for better type safety
+type OrderStatus = "pending" | "in_progress" | "delivered"
+type StaffRole = "manager" | "waiter" | "chef"
+
+interface Order {
+  id: number
+  name: string
+  status: OrderStatus
+  customer: string
+  total: string
+}
+
+interface InventoryItem {
+  id: number
+  name: string
+  quantity: number
+  unit: string
+}
+
+interface StaffMember {
+  id: number
+  name: string
+  role: StaffRole
+  shift: string
+}
+
+// Reusable section
+interface SectionProps {
+  title: string
+  icon: React.ReactNode
+  borderColor: string
+  bgColor: string
+  children: React.ReactNode
+}
+
+const Section: React.FC<SectionProps> = ({ title, icon, borderColor, bgColor, children }) => (
+  <div className={`bg-white rounded-lg border ${borderColor} shadow-md overflow-hidden`}>
+    <div className={`${bgColor} border-b ${borderColor} px-4 py-3`}>
+      <h2 className="flex items-center gap-2 font-semibold">
+        {icon}
+        {title}
+      </h2>
+    </div>
+    <div className="p-4">{children}</div>
+  </div>
+)
+
+// Status badge
+const StatusBadge: React.FC<{ status: OrderStatus }> = ({ status }) => {
+  switch (status) {
+    case "pending":
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+          <Clock className="w-3 h-3" aria-hidden="true" /> Pending
+        </span>
+      )
+    case "in_progress":
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+          <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" /> In Progress
+        </span>
+      )
+    case "delivered":
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-green-50 text-green-700 border border-green-200">
+          <CheckCircle2 className="w-3 h-3" aria-hidden="true" /> Delivered
+        </span>
+      )
+    default:
+      return <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-800">{status}</span>
+  }
+}
+
+// Order item
+interface OrderItemProps {
+  order: Order
+  onStatusChange: (id: number, status: OrderStatus) => void
+}
+
+const OrderItem: React.FC<OrderItemProps> = ({ order, onStatusChange }) => (
+  <div className="p-3 border border-amber-100 rounded-lg bg-white">
+    <div className="flex justify-between items-center mb-2">
+      <span className="font-medium">{order.name}</span>
+      <StatusBadge status={order.status} />
+    </div>
+    <div className="text-sm text-gray-500 mb-3">
+      <div>Customer: {order.customer}</div>
+      <div>Total: {order.total}</div>
+    </div>
+    <div className="relative">
+      <label htmlFor={`order-status-${order.id}`} className="sr-only">
+        Change order status
+      </label>
+      <select
+        id={`order-status-${order.id}`}
+        value={order.status}
+        onChange={(e) => onStatusChange(order.id, e.target.value as OrderStatus)}
+        className="w-full px-3 py-2 bg-white border border-amber-200 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-300 focus:border-amber-300 appearance-none"
+        aria-label={`Change status for ${order.name}`}
+      >
+        <option value="pending">Pending</option>
+        <option value="in_progress">In Progress</option>
+        <option value="delivered">Delivered</option>
+      </select>
+      <ChevronDown className="absolute right-3 top-2.5 h-4 w-4 text-amber-500 pointer-events-none" aria-hidden="true" />
+    </div>
+  </div>
+)
+
+// Inventory item
+interface InventoryItemProps {
+  item: InventoryItem
+  onQuantityChange: (id: number, quantity: number) => void
+}
+
+const InventoryItemComponent: React.FC<InventoryItemProps> = ({ item, onQuantityChange }) => (
+  <div className="p-3 border border-green-100 rounded-lg bg-white">
+    <div className="flex justify-between items-center mb-2">
+      <span className="font-medium">{item.name}</span>
+      <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-green-50 text-green-700 border border-green-200">
+        {item.unit}
+      </span>
+    </div>
+    <div className="flex items-center gap-2">
+      <label htmlFor={`inventory-quantity-${item.id}`} className="sr-only">
+        Quantity for {item.name}
+      </label>
+      <input
+        id={`inventory-quantity-${item.id}`}
+        type="number"
+        value={item.quantity}
+        onChange={(e) => onQuantityChange(item.id, Number.parseInt(e.target.value))}
+        className="w-full px-3 py-2 bg-white border border-green-200 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-300"
+        min="0"
+        aria-label={`Change quantity for ${item.name}`}
+      />
+      <span className="text-sm text-gray-500">in stock</span>
+    </div>
+  </div>
+)
+
+// Staff member
+interface StaffItemProps {
+  member: StaffMember
+  onRoleChange: (id: number, role: StaffRole) => void
+}
+
+const StaffItem: React.FC<StaffItemProps> = ({ member, onRoleChange }) => (
+  <div className="p-3 border border-blue-100 rounded-lg bg-white">
+    <div className="flex justify-between items-center mb-2">
+      <span className="font-medium">{member.name}</span>
+      <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+        {member.shift}
+      </span>
+    </div>
+    <div className="relative">
+      <label htmlFor={`staff-role-${member.id}`} className="sr-only">
+        Change role for {member.name}
+      </label>
+      <select
+        id={`staff-role-${member.id}`}
+        value={member.role}
+        onChange={(e) => onRoleChange(member.id, e.target.value as StaffRole)}
+        className="w-full px-3 py-2 bg-white border border-blue-200 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-300 appearance-none"
+        aria-label={`Change role for ${member.name}`}
+      >
+        <option value="manager">Manager</option>
+        <option value="waiter">Waiter</option>
+        <option value="chef">Chef</option>
+      </select>
+      <ChevronDown className="absolute right-3 top-2.5 h-4 w-4 text-blue-500 pointer-events-none" aria-hidden="true" />
+    </div>
+  </div>
+)
+
+const RestaurantManagementSystem: React.FC = () => {
+  const [orders, setOrders] = useState<Order[]>([
+    { id: 1, name: "Order #1001", status: "pending", customer: "John Doe", total: "$45.50" },
+    { id: 2, name: "Order #1002", status: "in_progress", customer: "Jane Smith", total: "$32.75" },
+    { id: 3, name: "Order #1003", status: "delivered", customer: "Robert Johnson", total: "$78.25" },
   ])
-  const [newNote, setNewNote] = useState("")
-  const [updateNoteId, setUpdateNoteId] = useState<number | null>(null)
-  const [updateNoteText, setUpdateNoteText] = useState("")
 
-  const addNote = () => {
-    if (newNote.trim() !== "") {
-      const newNotes = [...notes, { id: notes.length + 1, text: newNote, completed: false }]
-      setNotes(newNotes)
-      setNewNote("")
-    }
-  }
+  const [inventory, setInventory] = useState<InventoryItem[]>([
+    { id: 1, name: "Tomatoes", quantity: 10, unit: "kg" },
+    { id: 2, name: "Chicken", quantity: 20, unit: "kg" },
+    { id: 3, name: "Olive Oil", quantity: 30, unit: "bottles" },
+  ])
 
-  const deleteNote = (id: number) => {
-    const newNotes = notes.filter((note) => note.id !== id)
-    setNotes(newNotes)
-  }
+  const [staff, setStaff] = useState<StaffMember[]>([
+    { id: 1, name: "Ahmed Hassan", role: "manager", shift: "Morning" },
+    { id: 2, name: "Sara Ali", role: "waiter", shift: "Evening" },
+    { id: 3, name: "Mohamed Kamal", role: "chef", shift: "Full day" },
+  ])
 
-  const updateNote = (id: number) => {
-    setUpdateNoteId(id)
-    const noteToUpdate = notes.find((note) => note.id === id)
-    if (noteToUpdate) {
-      setUpdateNoteText(noteToUpdate.text)
-    }
-  }
-
-  const saveUpdateNote = () => {
-    if (updateNoteId !== null && updateNoteText.trim() !== "") {
-      const newNotes = notes.map((note) => {
-        if (note.id === updateNoteId) {
-          return { ...note, text: updateNoteText }
+  const handleOrderStatusChange = (id: number, status: OrderStatus) => {
+    setOrders(
+      orders.map((order) => {
+        if (order.id === id) {
+          return { ...order, status }
         }
-        return note
-      })
-      setNotes(newNotes)
-      setUpdateNoteId(null)
-      setUpdateNoteText("")
-    }
+        return order
+      }),
+    )
   }
 
-  const toggleCompleted = (id: number) => {
-    const newNotes = notes.map((note) => {
-      if (note.id === id) {
-        return { ...note, completed: !note.completed }
-      }
-      return note
-    })
-    setNotes(newNotes)
+  const handleInventoryQuantityChange = (id: number, quantity: number) => {
+    setInventory(
+      inventory.map((item) => {
+        if (item.id === id) {
+          return { ...item, quantity }
+        }
+        return item
+      }),
+    )
   }
 
-  const filteredNotes = notes.filter((note) => note.completed)
-  const activeNotes = notes.filter((note) => !note.completed)
+  const handleStaffRoleChange = (id: number, role: StaffRole) => {
+    setStaff(
+      staff.map((member) => {
+        if (member.id === id) {
+          return { ...member, role }
+        }
+        return member
+      }),
+    )
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-50 p-4 md:p-8">
-      <div className="max-w-3xl mx-auto bg-white rounded-xl shadow-lg overflow-hidden">
-        <div className="bg-gradient-to-r from-purple-600 to-indigo-600 p-6">
-          <div className="flex items-center justify-center">
-            <ClipboardList className="h-8 w-8 text-white mr-3" />
-            <h1 className="text-3xl font-bold text-white">Notes App</h1>
+    <div className="container mx-auto p-4 pt-6 mt-4 bg-gradient-to-b from-amber-50 to-white min-h-screen">
+      <div className="text-center mb-8">
+        <h1 className="text-3xl font-bold text-amber-800">Restaurant Management System</h1>
+        <p className="text-amber-600 mt-2">Manage orders, inventory, and staff efficiently</p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+        {/* Orders Section */}
+        <Section
+          title="Orders"
+          icon={<ClipboardList className="h-5 w-5 text-amber-800" />}
+          borderColor="border-amber-200"
+          bgColor="bg-amber-100"
+        >
+          <div className="space-y-4">
+            {orders.map((order) => (
+              <OrderItem key={order.id} order={order} onStatusChange={handleOrderStatusChange} />
+            ))}
           </div>
-        </div>
+        </Section>
 
-        <div className="p-6">
-          <div className="flex flex-col md:flex-row gap-2 mb-6">
-            <input
-              type="text"
-              value={newNote}
-              onChange={(e) => setNewNote(e.target.value)}
-              className="flex-grow p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 transition-all"
-              placeholder="Add new note"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") addNote()
-              }}
-            />
-            <button
-              onClick={addNote}
-              className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-medium py-3 px-6 rounded-lg transition-all flex items-center justify-center"
-            >
-              <Plus className="h-5 w-5 mr-2" />
-              Add Note
-            </button>
+        {/* Inventory Section */}
+        <Section
+          title="Inventory"
+          icon={<Package className="h-5 w-5 text-green-800" />}
+          borderColor="border-green-200"
+          bgColor="bg-green-100"
+        >
+          <div className="space-y-4">
+            {inventory.map((item) => (
+              <InventoryItemComponent key={item.id} item={item} onQuantityChange={handleInventoryQuantityChange} />
+            ))}
           </div>
+        </Section>
 
-          <div className="mb-8">
-            <h2 className="text-xl font-semibold mb-4 text-gray-800 flex items-center">
-              <Circle className="h-5 w-5 mr-2 text-purple-600" />
-              Active Notes
-            </h2>
-            {activeNotes.length === 0 ? (
-              <p className="text-gray-500 italic text-center py-4">No active notes. Add one above!</p>
-            ) : (
-              <ul className="space-y-3">
-                {activeNotes.map((note) => (
-                  <li
-                    key={note.id}
-                    className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-all"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center flex-grow">
-                        <button
-                          onClick={() => toggleCompleted(note.id)}
-                          className="mr-3 text-gray-400 hover:text-purple-600 transition-colors"
-                        >
-                          <Circle className="h-5 w-5" />
-                        </button>
-
-                        {updateNoteId === note.id ? (
-                          <input
-                            type="text"
-                            value={updateNoteText}
-                            onChange={(e) => setUpdateNoteText(e.target.value)}
-                            className="flex-grow p-2 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                            autoFocus
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") saveUpdateNote()
-                            }}
-                          />
-                        ) : (
-                          <span className="text-gray-800">{note.text}</span>
-                        )}
-                      </div>
-
-                      <div className="flex space-x-2 ml-4">
-                        {updateNoteId === note.id ? (
-                          <button
-                            onClick={saveUpdateNote}
-                            className="p-2 text-green-600 hover:bg-green-50 rounded-full transition-colors"
-                            title="Save"
-                          >
-                            <Save className="h-5 w-5" />
-                          </button>
-                        ) : (
-                          <>
-                            <button
-                              onClick={() => updateNote(note.id)}
-                              className="p-2 text-amber-600 hover:bg-amber-50 rounded-full transition-colors"
-                              title="Edit"
-                            >
-                              <Edit className="h-5 w-5" />
-                            </button>
-                            <button
-                              onClick={() => deleteNote(note.id)}
-                              className="p-2 text-red-600 hover:bg-red-50 rounded-full transition-colors"
-                              title="Delete"
-                            >
-                              <Trash2 className="h-5 w-5" />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
+        {/* Staff Section */}
+        <Section
+          title="Staff"
+          icon={<Users className="h-5 w-5 text-blue-800" />}
+          borderColor="border-blue-200"
+          bgColor="bg-blue-100"
+        >
+          <div className="space-y-4">
+            {staff.map((member) => (
+              <StaffItem key={member.id} member={member} onRoleChange={handleStaffRoleChange} />
+            ))}
           </div>
-
-          <div>
-            <h2 className="text-xl font-semibold mb-4 text-gray-800 flex items-center border-t pt-6">
-              <CheckCircle className="h-5 w-5 mr-2 text-green-600" />
-              Completed Notes
-            </h2>
-            {filteredNotes.length === 0 ? (
-              <p className="text-gray-500 italic text-center py-4">No completed notes yet.</p>
-            ) : (
-              <ul className="space-y-3">
-                {filteredNotes.map((note) => (
-                  <li key={note.id} className="bg-gray-50 border border-gray-200 rounded-lg p-4 shadow-sm">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center">
-                        <button onClick={() => toggleCompleted(note.id)} className="mr-3 text-green-600">
-                          <CheckCircle className="h-5 w-5" />
-                        </button>
-                        <span className="text-gray-500 line-through">{note.text}</span>
-                      </div>
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => deleteNote(note.id)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-full transition-colors"
-                          title="Delete"
-                        >
-                          <Trash2 className="h-5 w-5" />
-                        </button>
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
+        </Section>
       </div>
     </div>
   )
 }
 
-export default NotesApp
-
-
+export default RestaurantManagementSystem
 
