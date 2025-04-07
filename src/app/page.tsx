@@ -1,889 +1,817 @@
-"use client"
-import { memo, useCallback, useState, useReducer } from "react"
-import Image from "next/image"
-import { type ChangeEvent, useEffect } from "react"
-import { Trash, Edit, ShoppingCart, Plus, Check, AlertCircle, Upload, X } from "lucide-react"
-import { motion, AnimatePresence } from "framer-motion"
-import { Inter, Playfair_Display } from "next/font/google"
 
+      "use client"
+import { createContext, useContext, useState, useEffect, type ChangeEvent, type FormEvent, type ReactNode } from "react"
+import { Heart, MessageSquare, Send, User, X, UserPlus, MessageCircle } from "lucide-react"
 
-// Define fonts
-const inter = Inter({ subsets: ["latin"], display: "swap", variable: "--font-inter" })
-const playfair = Playfair_Display({ subsets: ["latin"], display: "swap", variable: "--font-playfair" })
+function formatLikes(likes: number): string {
+  return likes >= 1000 ? `${Math.floor(likes / 1000)} thousand` : likes.toString()
+}
+
+function timeSince(timestamp: number): string {
+  const seconds = Math.floor((Date.now() - timestamp) / 1000)
+  if (seconds < 60) return "Now"
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes} min`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours} h`
+  const days = Math.floor(hours / 24)
+  return `${days} d`
+}
 
 // Types
-interface Book {
-  id: string
-  title: string
-  author: string
-  description: string
-  image: string
+export type CommentType = {
+  id: number
+  user: string
+  text: string
+  likes: number
+  liked: boolean
 }
 
-interface FormState {
-  book: Book
-  editing: boolean
-  errors: {
-    title: string | null
-    author: string | null
-    description: string | null
-  }
-  touched: {
-    title: boolean
-    author: boolean
-    description: boolean
-  }
-  selectedImage: string | null
+export type Post = {
+  id: number
+  user: string
+  content: string
+  likes: number
+  liked: boolean
+  comments: CommentType[]
+  createdAt: number
 }
 
-type FormAction =
-  | { type: "SET_FIELD"; field: string; value: string }
-  | { type: "SET_ERRORS"; errors: Partial<FormState["errors"]> }
-  | { type: "SET_TOUCHED"; field: keyof FormState["touched"]; value: boolean }
-  | { type: "SET_ALL_TOUCHED"; value: boolean }
-  | { type: "SET_SELECTED_IMAGE"; value: string | null }
-  | { type: "LOAD_BOOK"; book: Book }
-  | { type: "RESET_FORM" }
-
-// Constants
-const DEFAULT_COVERS = [
-  "https://res.cloudinary.com/db1lfazhq/image/upload/v1736091988/oxrripuwg0gqwa4ithge.jpg",
-  "https://res.cloudinary.com/db1lfazhq/image/upload/v1736114455/va9spfgkn9qajldmhily.jpg",
-  "https://res.cloudinary.com/db1lfazhq/image/upload/v1736285175/beskrgdsbyqnky8hflgi.jpg",
-]
-
-// Image upload constraints
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024 // 5MB - limit chosen to balance usability with performance concerns
-const VALID_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] // Common web formats with good compression
-
-// CSS classes for consistent styling
-// Using Tailwind utility classes for maintainable and consistent UI
-// These class combinations create reusable button and input styles
-const BUTTON_BASE = "focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors" // Base styles for all buttons
-const PRIMARY_BUTTON = `${BUTTON_BASE} bg-purple-600 text-white rounded-md hover:bg-purple-700 focus:ring-purple-500 shadow-md` // Action buttons
-const SECONDARY_BUTTON = `${BUTTON_BASE} border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:ring-purple-400 shadow-sm` // Secondary actions
-const DANGER_BUTTON = `${BUTTON_BASE} border border-gray-300 rounded-md text-rose-500 hover:text-rose-700 bg-white hover:bg-gray-50 focus:ring-rose-400` // Destructive actions
-const INPUT_BASE =
-  "w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent transition-all duration-200" // Form inputs
-
-/**
- * Helper function to generate a unique ID for each book
- * Uses a random string to ensure uniqueness
- */
-const generateId = () => "id-" + Math.random().toString(36).substr(2, 9)
-
-/**
- * Form reducer to manage form state
- * Handles all form-related actions
- */
-function formReducer(state: FormState, action: FormAction): FormState {
-  switch (action.type) {
-    case "SET_FIELD":
-      return {
-        ...state,
-        book: { ...state.book, [action.field]: action.value },
-      }
-    case "SET_ERRORS":
-      return {
-        ...state,
-        errors: { ...state.errors, ...action.errors },
-      }
-    case "SET_TOUCHED":
-      return {
-        ...state,
-        touched: { ...state.touched, [action.field]: action.value },
-      }
-    case "SET_ALL_TOUCHED":
-      return {
-        ...state,
-        touched: { title: action.value, author: action.value, description: action.value },
-      }
-    case "SET_SELECTED_IMAGE":
-      return {
-        ...state,
-        selectedImage: action.value,
-        book: action.value ? { ...state.book, image: action.value } : state.book,
-      }
-    case "LOAD_BOOK":
-      return {
-        ...state,
-        book: action.book,
-        editing: true,
-        selectedImage: action.book.image.startsWith("data:") ? action.book.image : null,
-        errors: { title: null, author: null, description: null },
-        touched: { title: false, author: false, description: false },
-      }
-    case "RESET_FORM":
-      return {
-        book: { id: "", title: "", author: "", description: "", image: DEFAULT_COVERS[0] },
-        editing: false,
-        errors: { title: null, author: null, description: null },
-        touched: { title: false, author: false, description: false },
-        selectedImage: null,
-      }
-    default:
-      return state
-  }
+export type PrivateMessage = {
+  id: number
+  from: string
+  to: string
+  content: string
+  createdAt: number
 }
 
-/**
- * Toast notification component
- * Displays success or error messages to the user
- * Auto-dismisses after a timeout
- */
-const Toast = memo(
-  ({ message, type, onClose }: { message: string; type: "success" | "error"; onClose: () => void }) => {
-    useEffect(() => {
-      const timer = setTimeout(onClose, 3000)
-      return () => clearTimeout(timer)
-    }, [onClose])
+export type FriendRequest = {
+  id: number
+  from: string
+  to: string
+  status: "pending" | "accepted" | "declined"
+}
 
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 50 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: 20 }}
-        transition={{ duration: 0.3 }}
-        role="alert"
-        aria-live="assertive"
-        className={`fixed bottom-4 right-4 px-4 py-3 rounded-md shadow-lg flex items-center space-x-2 z-50 ${
-          type === "success" ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
-        }`}
-      >
-        {type === "success" ? <Check className="h-5 w-5" /> : <AlertCircle className="h-5 w-5" />}
-        <span>{message}</span>
-        <button
-          onClick={onClose}
-          className="ml-2 text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-400 rounded-full p-1"
-          aria-label="Close notification"
-        >
-          <X className="h-4 w-4" />
-          <span className="sr-only">Close</span>
-        </button>
-      </motion.div>
-    )
-  },
-)
+type AppContextType = {
+  posts: Post[]
+  privateMessages: PrivateMessage[]
+  friendRequests: FriendRequest[]
+  loading: boolean
+  error: string | null
+  toast: string | null
+  setToast: (msg: string | null) => void
+  createPost: (content: string) => void
+  togglePostLike: (postId: number) => void
+  addComment: (postId: number, commentText: string) => void
+  likeComment: (postId: number, commentId: number) => void
+  sendMessage: (to: string, content: string) => void
+  sendFriendRequest: (to: string) => void
+  respondFriendRequest: (requestId: number, response: "accepted" | "declined") => void
+}
 
-// Required for React DevTools and debugging
-Toast.displayName = "Toast"
+const AppContext = createContext<AppContextType | undefined>(undefined)
 
-/**
- * Main BookStore component
- * Manages the book collection and provides UI for CRUD operations
- */
-export default function BookStore() {
-  // Books state - stores the collection of books
-  const [books, setBooks] = useState<Book[]>([
-    {
-      id: generateId(),
-      title: "The Great Gatsby",
-      author: "F. Scott Fitzgerald",
-      description: "A novel about the decadence and excess of the Jazz Age.",
-      image: DEFAULT_COVERS[0],
-    },
-    {
-      id: generateId(),
-      title: "To Kill a Mockingbird",
-      author: "Harper Lee",
-      description: "A novel about racial inequality and moral growth in the American South.",
-      image: DEFAULT_COVERS[1],
-    },
-  ])
+export const AppProvider = ({ children }: { children: ReactNode }) => {
+  const [posts, setPosts] = useState<Post[]>([])
+  const [privateMessages, setPrivateMessages] = useState<PrivateMessage[]>([])
+  const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([])
+  const [loading, setLoading] = useState<boolean>(true)
+  const [error, setError] = useState<string | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
 
-  // Form state - manages the current book being added or edited
-  const [formState, dispatch] = useReducer(formReducer, {
-    book: { id: "", title: "", author: "", description: "", image: DEFAULT_COVERS[0] },
-    editing: false,
-    errors: { title: null, author: null, description: null },
-    touched: { title: false, author: false, description: false },
-    selectedImage: null,
-  })
-
-  // Toast state - manages notification messages
-  const [toast, setToast] = useState<{ show: boolean; message: string; type: "success" | "error" }>({
-    show: false,
-    message: "",
-    type: "success",
-  })
-
-  /**
-   * Shows a toast notification with the specified message and type
-   */
-  const showToast = useCallback((message: string, type: "success" | "error") => {
-    setToast({ show: true, message, type })
-  }, [])
-
-  /**
-   * Hides the currently displayed toast notification
-   */
-  const hideToast = useCallback(() => {
-    setToast((prev) => ({ ...prev, show: false }))
-  }, [])
-
-  /**
-   * Validates a single form field
-   * Returns an error message if validation fails, null otherwise
-   */
-  const validateField = useCallback(
-    (field: keyof Pick<Book, "title" | "author" | "description">, value: string): string | null => {
-      if (!value.trim()) return `${field} is required`
-
-      switch (field) {
-        case "title":
-          if (value.trim().length < 3) return "Title must be at least 3 characters"
-          if (value.trim().length > 100) return "Title must be less than 100 characters"
-          break
-        case "author":
-          if (value.trim().length < 3) return "Author must be at least 3 characters"
-          if (!/^[a-zA-Z\s.'-]+$/.test(value.trim())) return "Author name contains invalid characters"
-          break
-        case "description":
-          if (value.trim().length < 10) return "Description must be at least 10 characters"
-          if (value.trim().length > 500) return "Description must be less than 500 characters"
-          break
-      }
-
-      return null
-    },
-    [],
-  )
-
-  /**
-   * Validates the entire form
-   * Returns true if all fields are valid, false otherwise
-   */
-  const validateForm = useCallback(() => {
-    const titleError = validateField("title", formState.book.title)
-    const authorError = validateField("author", formState.book.author)
-    const descriptionError = validateField("description", formState.book.description)
-
-    dispatch({
-      type: "SET_ERRORS",
-      errors: { title: titleError, author: authorError, description: descriptionError },
-    })
-    dispatch({ type: "SET_ALL_TOUCHED", value: true })
-
-    return !titleError && !authorError && !descriptionError
-  }, [formState.book, validateField])
-
-  /**
-   * Handles changes to form fields
-   * Updates the form state and validates the field if it has been touched
-   */
-  const handleChange = useCallback(
-    (field: keyof Book, value: string) => {
-      dispatch({ type: "SET_FIELD", field, value })
-
-      if (field in formState.touched && formState.touched[field as keyof typeof formState.touched]) {
-        const error = validateField(field as keyof Pick<Book, "title" | "author" | "description">, value)
-        dispatch({ type: "SET_ERRORS", errors: { [field]: error } })
-      }
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [formState.touched, validateField],
-  )
-
-  /**
-   * Handles blur events on form fields
-   * Marks the field as touched and validates it
-   */
-  const handleBlur = useCallback(
-    (field: keyof typeof formState.touched) => {
-      dispatch({ type: "SET_TOUCHED", field, value: true })
-      const error = validateField(field as keyof Pick<Book, "title" | "author" | "description">, formState.book[field])
-      dispatch({ type: "SET_ERRORS", errors: { [field]: error } })
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [formState.book, validateField],
-  )
-
-  /**
-   * Converts a File object to a base64 string
-   * Used for image uploads
-   */
-  const fileToBase64 = useCallback((file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.readAsDataURL(file)
-      reader.onload = () => resolve(reader.result as string)
-      reader.onerror = (error) => reject(error)
-    })
-  }, [])
-
-  /**
-   * Handles file input changes for image uploads
-   * Validates the file type and size, then converts to base64
-   * Provides detailed error feedback for invalid uploads
-   */
-  const handleFileChange = useCallback(
-    async (e: ChangeEvent<HTMLInputElement>) => {
+  // Simulation of backend call to load initial data
+  useEffect(() => {
+    setLoading(true)
+    setError(null)
+    setTimeout(() => {
       try {
-        const file = e.target.files?.[0]
-        if (!file) return
-
-        // Validate file type
-        if (!VALID_IMAGE_TYPES.includes(file.type)) {
-          const validExtensions = VALID_IMAGE_TYPES.map((t) => t.split("/")[1].toUpperCase()).join(", ")
-          showToast(`Invalid file type: ${file.type}. Please upload a valid image file (${validExtensions}).`, "error")
-          return
-        }
-
-        // Validate file size
-        if (file.size > MAX_IMAGE_SIZE) {
-          const maxSizeMB = MAX_IMAGE_SIZE / (1024 * 1024)
-          const fileSizeMB = (file.size / (1024 * 1024)).toFixed(2)
-          showToast(
-            `Image file is too large (${fileSizeMB}MB). Maximum size is ${maxSizeMB}MB. Please compress your image or choose a smaller file.`,
-            "error",
-          )
-          return
-        }
-
-        // Convert to base64
-        try {
-          const base64 = await fileToBase64(file)
-
-          // Additional validation: Check if the base64 string is valid
-          if (!base64 || !base64.startsWith("data:image/")) {
-            showToast("The file appears to be corrupted or is not a valid image. Please try another file.", "error")
-            return
-          }
-
-          dispatch({ type: "SET_SELECTED_IMAGE", value: base64 })
-          showToast("Image uploaded successfully!", "success")
-        } catch (error) {
-          console.error("Error converting image to base64:", error)
-          showToast("Failed to process the image. The file may be corrupted or use an unsupported encoding.", "error")
-        }
-      } catch (error) {
-        console.error("Error processing image:", error)
-        showToast(
-          "An unexpected error occurred while processing your image. Please try again with a different file.",
-          "error",
-        )
-      } finally {
-        // Reset the input value to allow selecting the same file again
-        e.target.value = ""
+        const initialPosts: Post[] = [
+          {
+            id: 1,
+            user: "Alice",
+            content: "My first post! Welcome to my timeline.",
+            likes: 2,
+            liked: false,
+            createdAt: Date.now() - 1000 * 60 * 10,
+            comments: [
+              { id: 100, user: "Bob", text: "Great post!", likes: 0, liked: false },
+              { id: 101, user: "Carol", text: "Welcome!", likes: 0, liked: false },
+            ],
+          },
+          {
+            id: 2,
+            user: "John Doe",
+            content: "Today is a fantastic day to code!",
+            likes: 5,
+            liked: false,
+            createdAt: Date.now() - 1000 * 60 * 60 * 2,
+            comments: [
+              { id: 102, user: "Eve", text: "Absolutely!", likes: 0, liked: false },
+              { id: 103, user: "Frank", text: "I need coffee to get started.", likes: 0, liked: false },
+            ],
+          },
+        ]
+        const initialMessages: PrivateMessage[] = [
+          {
+            id: 101,
+            from: "Alice",
+            to: "You",
+            content: "Hi there!",
+            createdAt: Date.now() - 60000,
+          },
+          {
+            id: 102,
+            from: "You",
+            to: "Alice",
+            content: "Hello, Alice!",
+            createdAt: Date.now() - 30000,
+          },
+        ]
+        setPosts(initialPosts)
+        setPrivateMessages(initialMessages)
+        setFriendRequests([])
+        setLoading(false)
+      } catch (err) {
+        console.log(err)
+        setError("Failed to load data.")
+        setLoading(false)
       }
-    },
-    [showToast, fileToBase64],
-  )
-
-  /**
-   * Handles selection of a default cover image
-   */
-  const handleCoverSelect = useCallback((cover: string) => {
-    dispatch({ type: "SET_SELECTED_IMAGE", value: null })
-    dispatch({ type: "SET_FIELD", field: "image", value: cover })
+    }, 1500)
   }, [])
 
-  /**
-   * Adds a new book to the collection
-   * Validates the form first, then creates a new book
-   */
-  const addBook = useCallback(() => {
-    if (!validateForm()) {
-      showToast("Please correct the errors in the form before adding the book.", "error")
-      return
+  // Actions
+  const createPost = (content: string) => {
+    const newPost: Post = {
+      id: Date.now(),
+      user: "You",
+      content,
+      likes: 0,
+      liked: false,
+      createdAt: Date.now(),
+      comments: [],
     }
+    setPosts((prev) => [newPost, ...prev])
+    setToast("Post created successfully.")
+  }
 
-    const newBook = {
-      ...formState.book,
-      id: generateId(),
-      image: formState.selectedImage || formState.book.image,
+  const togglePostLike = (postId: number) => {
+    setPosts((prev) =>
+      prev.map((p) => (p.id === postId ? { ...p, liked: !p.liked, likes: p.liked ? p.likes - 1 : p.likes + 1 } : p)),
+    )
+  }
+
+  const addComment = (postId: number, commentText: string) => {
+    const newComment: CommentType = {
+      id: Date.now(),
+      user: "You",
+      text: commentText,
+      likes: 0,
+      liked: false,
     }
+    setPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, comments: [...p.comments, newComment] } : p)))
+    setToast("Comment added.")
+  }
 
-    setBooks((prev) => [...prev, newBook])
-    showToast("Book added successfully!", "success")
-    dispatch({ type: "RESET_FORM" })
-  }, [formState.book, formState.selectedImage, showToast, validateForm])
+  const likeComment = (postId: number, commentId: number) => {
+    setPosts((prev) =>
+      prev.map((post) => {
+        if (post.id === postId) {
+          const updatedComments = post.comments.map((comment) => {
+            if (comment.id === commentId) {
+              return {
+                ...comment,
+                liked: !comment.liked,
+                likes: comment.liked ? comment.likes - 1 : comment.likes + 1,
+              }
+            }
+            return comment
+          })
+          return { ...post, comments: updatedComments }
+        }
+        return post
+      }),
+    )
+  }
 
-  /**
-   * Updates an existing book in the collection
-   * Validates the form first, then updates the book
-   */
-  const updateBook = useCallback(() => {
-    if (!validateForm()) {
-      showToast("Please correct the errors in the form before updating the book.", "error")
-      return
+  const sendMessage = (to: string, content: string) => {
+    const newMessage: PrivateMessage = {
+      id: Date.now(),
+      from: "You",
+      to,
+      content,
+      createdAt: Date.now(),
     }
+    setPrivateMessages((prev) => [...prev, newMessage])
+    setToast("Message sent.")
+  }
 
-    const updatedBook = {
-      ...formState.book,
-      image: formState.selectedImage || formState.book.image,
+  const sendFriendRequest = (to: string) => {
+    if (friendRequests.some((req) => req.from === "You" && req.to === to)) return
+    const newRequest: FriendRequest = {
+      id: Date.now(),
+      from: "You",
+      to,
+      status: "pending",
     }
+    setFriendRequests((prev) => [...prev, newRequest])
+    setToast("Friend request sent.")
+  }
 
-    setBooks((prev) => prev.map((book) => (book.id === updatedBook.id ? updatedBook : book)))
-    showToast("Book updated successfully!", "success")
-    dispatch({ type: "RESET_FORM" })
-  }, [formState.book, formState.selectedImage, showToast, validateForm])
-
-  /**
-   * Deletes a book from the collection
-   */
-  const deleteBook = useCallback(
-    (id: string) => {
-      setBooks((prev) => prev.filter((book) => book.id !== id))
-      showToast("Book deleted successfully!", "success")
-    },
-    [showToast],
-  )
-
-  /**
-   * Loads a book into the form for editing
-   */
-  const editBook = useCallback((book: Book) => {
-    dispatch({ type: "LOAD_BOOK", book })
-  }, [])
-
-  /**
-   * Handles form submission
-   * Calls either addBook or updateBook depending on the editing state
-   */
-  const handleSubmit = useCallback(() => {
-    if (formState.editing) {
-      updateBook()
-    } else {
-      addBook()
-    }
-  }, [formState.editing, updateBook, addBook])
+  const respondFriendRequest = (requestId: number, response: "accepted" | "declined") => {
+    setFriendRequests((prev) => prev.map((req) => (req.id === requestId ? { ...req, status: response } : req)))
+    setToast(`Friend request ${response}.`)
+  }
 
   return (
-    <div
-      className={`min-h-screen bg-gradient-to-br from-gray-50 to-purple-50 py-8 px-4 sm:px-6 lg:px-8 ${inter.variable} ${playfair.variable} font-sans`}
+    <AppContext.Provider
+      value={{
+        posts,
+        privateMessages,
+        friendRequests,
+        loading,
+        error,
+        toast,
+        setToast,
+        createPost,
+        togglePostLike,
+        addComment,
+        likeComment,
+        sendMessage,
+        sendFriendRequest,
+        respondFriendRequest,
+      }}
     >
-      {/* Skip link for keyboard users */}
-      <a
-        href="#form-heading"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-purple-600 focus:text-white focus:rounded-md"
-      >
-        Skip to main content
-      </a>
+      {children}
+    </AppContext.Provider>
+  )
+}
 
-      <div className="max-w-7xl mx-auto">
-        {/* Header Section */}
-        <header className="text-center mb-12" role="banner">
-          <motion.h1
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className={`text-4xl font-bold text-gray-900 sm:text-5xl ${playfair.className} drop-shadow-sm`}
-          >
-            Book Store
-          </motion.h1>
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="mt-3 text-lg text-purple-700"
-          >
-            Manage your book collection
-          </motion.p>
-        </header>
+export const useAppContext = (): AppContextType => {
+  const context = useContext(AppContext)
+  if (!context) throw new Error("useAppContext must be used within an AppProvider")
+  return context
+}
 
-        {/* Book Form Section */}
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="bg-white rounded-lg shadow-lg mb-12 overflow-hidden border border-purple-100"
-          aria-labelledby="form-heading"
-        >
-          <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-purple-100">
-            <h2 id="form-heading" className={`text-xl font-semibold text-purple-900 ${playfair.className}`}>
-              {formState.editing ? "Edit Book" : "Add New Book"}
-            </h2>
-          </div>
+function HomeContent() {
+  const {
+    posts,
+    loading,
+    error,
+    toast,
+    setToast,
+    createPost,
+    togglePostLike,
+    addComment,
+    likeComment,
+    sendMessage,
+    sendFriendRequest,
+    respondFriendRequest,
+  } = useAppContext()
 
-          <div className="p-6">
-            <div className="grid gap-6 sm:grid-cols-2">
-              {/* Form Fields */}
-              <div className="space-y-4">
-                {/* Title Field */}
-                <div>
-                  <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-1">
-                    Title{" "}
-                    <span className="text-red-500" aria-hidden="true">
-                      *
-                    </span>
-                    <span className="sr-only">(required)</span>
-                  </label>
-                  <input
-                    id="title"
-                    type="text"
-                    value={formState.book.title}
-                    onChange={(e) => handleChange("title", e.target.value)}
-                    onBlur={() => handleBlur("title")}
-                    placeholder="Enter book title"
-                    className={`${INPUT_BASE} ${formState.errors.title ? "border-red-500" : "border-gray-300"}`}
-                    aria-invalid={!!formState.errors.title}
-                    aria-describedby={formState.errors.title ? "title-error title-help" : "title-help"}
-                    required
-                  />
-                  {formState.errors.title && formState.touched.title && (
-                    <p id="title-error" className="mt-1 text-sm text-red-500" role="alert">
-                      {formState.errors.title}
-                    </p>
-                  )}
-                  <p id="title-help" className="mt-1 text-xs text-gray-500">
-                    Title should be between 3 and 100 characters
-                  </p>
+  const [newPostContent, setNewPostContent] = useState("")
+  const [isMessagesPanelOpen, setIsMessagesPanelOpen] = useState(false)
+  const [isFriendRequestsOpen, setIsFriendRequestsOpen] = useState(false)
+
+  const availableUsers = ["Alice", "Bob", "Carol", "John Doe", "Eve", "Frank"]
+
+  const handleNewPostChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
+    setNewPostContent(e.target.value)
+  }
+
+  const handleNewPostSubmit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    if (!newPostContent.trim()) return
+    createPost(newPostContent)
+    setNewPostContent("")
+  }
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [toast, setToast])
+
+  return (
+    <div className="relative min-h-screen" style={{ background: "#F4D8CD" }}>
+      <header className="bg-[#3A2E39] text-[#F4D8CD] p-6 shadow-lg">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center">
+          <h1 className="text-3xl font-bold mb-4 md:mb-0">Modern Social Platform</h1>
+          <nav className="flex items-center space-x-6">
+            <a href="#" className="hidden md:block text-[#F4D8CD] hover:text-[#EDB183] transition-colors">
+              Home
+            </a>
+            <a href="#" className="hidden md:block text-[#F4D8CD] hover:text-[#EDB183] transition-colors">
+              Explore
+            </a>
+            <a href="#" className="hidden md:block text-[#F4D8CD] hover:text-[#EDB183] transition-colors">
+              About
+            </a>
+            <div className="flex space-x-4">
+              <button
+                onClick={() => {
+                  setIsMessagesPanelOpen(!isMessagesPanelOpen)
+                  setIsFriendRequestsOpen(false)
+                }}
+                className="px-4 py-2 bg-[#EDB183] text-[#3A2E39] rounded-lg shadow hover:bg-[#F15152] hover:text-white transition-colors"
+              >
+                {isMessagesPanelOpen ? <X size={20} /> : <MessageSquare size={20} />}
+              </button>
+              <button
+                onClick={() => {
+                  setIsFriendRequestsOpen(!isFriendRequestsOpen)
+                  setIsMessagesPanelOpen(false)
+                }}
+                className="px-4 py-2 bg-[#EDB183] text-[#3A2E39] rounded-lg shadow hover:bg-[#F15152] hover:text-white transition-colors"
+              >
+                {isFriendRequestsOpen ? <X size={20} /> : <UserPlus size={20} />}
+              </button>
+            </div>
+          </nav>
+        </div>
+      </header>
+
+      {toast && (
+        <div className="fixed top-20 right-4 bg-[#EDB183] text-[#3A2E39] px-4 py-2 rounded shadow transition-opacity">
+          {toast}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex items-center justify-center h-full">
+          <p className="text-xl text-[#3A2E39]">Loading...</p>
+        </div>
+      ) : error ? (
+        <div className="flex items-center justify-center h-full">
+          <p className="text-xl text-red-500">{error}</p>
+        </div>
+      ) : (
+        <>
+          <div className="max-w-7xl mx-auto flex flex-col md:flex-row pt-8 px-4">
+            {/* Sidebar - only visible on desktop */}
+            <div className="hidden md:block w-1/4 pr-6">
+              <div className="bg-white rounded-xl shadow-lg p-6 mb-6 border-l-4 border-[#EDB183]">
+                <h2 className="text-xl font-semibold mb-4 text-[#3A2E39]">Profile</h2>
+                <div className="flex items-center space-x-3 mb-4">
+                  <div className="w-16 h-16 rounded-full bg-[#EDB183] flex items-center justify-center">
+                    <User size={32} className="text-[#3A2E39]" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-[#3A2E39]">Your Name</p>
+                    <p className="text-sm text-gray-500">@username</p>
+                  </div>
                 </div>
-
-                {/* Author Field */}
-                <div>
-                  <label htmlFor="author" className="block text-sm font-medium text-gray-700 mb-1">
-                    Author{" "}
-                    <span className="text-red-500" aria-hidden="true">
-                      *
-                    </span>
-                    <span className="sr-only">(required)</span>
-                  </label>
-                  <input
-                    id="author"
-                    type="text"
-                    value={formState.book.author}
-                    onChange={(e) => handleChange("author", e.target.value)}
-                    onBlur={() => handleBlur("author")}
-                    placeholder="Enter author name"
-                    className={`${INPUT_BASE} ${formState.errors.author ? "border-red-500" : "border-gray-300"}`}
-                    aria-invalid={!!formState.errors.author}
-                    aria-describedby={formState.errors.author ? "author-error author-help" : "author-help"}
-                    required
-                  />
-                  {formState.errors.author && formState.touched.author && (
-                    <p id="author-error" className="mt-1 text-sm text-red-500" role="alert">
-                      {formState.errors.author}
-                    </p>
-                  )}
-                  <p id="author-help" className="mt-1 text-xs text-gray-500">
-                    Author name should contain letters, spaces, and characters like periods, apostrophes, or hyphens
-                  </p>
-                </div>
-
-                {/* Description Field */}
-                <div>
-                  <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
-                    Description{" "}
-                    <span className="text-red-500" aria-hidden="true">
-                      *
-                    </span>
-                    <span className="sr-only">(required)</span>
-                  </label>
-                  <textarea
-                    id="description"
-                    value={formState.book.description}
-                    onChange={(e) => handleChange("description", e.target.value)}
-                    onBlur={() => handleBlur("description")}
-                    placeholder="Enter book description"
-                    rows={3}
-                    className={`${INPUT_BASE} ${formState.errors.description ? "border-red-500" : "border-gray-300"}`}
-                    aria-invalid={!!formState.errors.description}
-                    aria-describedby={
-                      formState.errors.description
-                        ? "description-error description-help description-count"
-                        : "description-help description-count"
-                    }
-                    required
-                  />
-                  {formState.errors.description && formState.touched.description && (
-                    <p id="description-error" className="mt-1 text-sm text-red-500" role="alert">
-                      {formState.errors.description}
-                    </p>
-                  )}
-                  <div className="mt-1 flex justify-between">
-                    <p id="description-help" className="text-xs text-gray-500">
-                      Description should be between 10 and 500 characters
-                    </p>
-                    <p id="description-count" className="text-xs text-gray-500" aria-live="polite">
-                      {formState.book.description.length}/500
-                    </p>
+                <div className="grid grid-cols-2 gap-2 text-center">
+                  <div className="p-2 bg-gray-100 rounded">
+                    <p className="font-bold text-[#3A2E39]">120</p>
+                    <p className="text-xs text-gray-500">Posts</p>
+                  </div>
+                  <div className="p-2 bg-gray-100 rounded">
+                    <p className="font-bold text-[#3A2E39]">1.5K</p>
+                    <p className="text-xs text-gray-500">Friends</p>
                   </div>
                 </div>
               </div>
-
-              {/* Image Upload */}
-              <div className="space-y-4">
-                <div>
-                  <label htmlFor="image" className="block text-sm font-medium text-gray-700 mb-1">
-                    Book Cover
-                  </label>
-                  <div className="relative">
-                    <input
-                      id="image"
-                      type="file"
-                      accept={VALID_IMAGE_TYPES.join(",")}
-                      onChange={handleFileChange}
-                      className="sr-only"
-                      aria-describedby="cover-help"
-                    />
-                    <label
-                      htmlFor="image"
-                      className="flex items-center justify-center w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus-within:outline-none focus-within:ring-2 focus-within:ring-purple-400 focus-within:border-transparent mb-2 transition-all duration-200 cursor-pointer bg-white hover:bg-gray-50"
-                    >
-                      <Upload className="h-4 w-4 mr-2 text-gray-500" aria-hidden="true" />
-                      <span>Choose image file</span>
-                    </label>
+              <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-[#EDB183]">
+                <h2 className="text-xl font-semibold mb-4 text-[#3A2E39]">Trending Topics</h2>
+                <div className="space-y-3">
+                  <div className="p-2 hover:bg-gray-100 rounded cursor-pointer">
+                    <p className="font-medium text-[#3A2E39]">#WebDevelopment</p>
+                    <p className="text-xs text-gray-500">1.2K posts</p>
                   </div>
-                  <p id="cover-help" className="text-sm text-gray-500">
-                    Upload a custom image (JPEG, PNG, GIF, WEBP, max 5MB) or select from default covers below
-                  </p>
-                </div>
-
-                {/* Default Covers */}
-                <div className="mt-4">
-                  <fieldset>
-                    <legend className="block text-sm font-medium text-gray-700 mb-2">Default Covers</legend>
-                    <div role="radiogroup" aria-label="Choose a default cover" className="flex space-x-2">
-                      {DEFAULT_COVERS.map((cover, index) => {
-                        const isSelected = formState.book.image === cover && !formState.selectedImage
-                        return (
-                          // eslint-disable-next-line jsx-a11y/role-supports-aria-props
-                          <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            key={index}
-                            type="button"
-                            onClick={() => handleCoverSelect(cover)}
-                            onKeyDown={(e) => {
-                              // Allow navigation between covers with arrow keys
-                              if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
-                                e.preventDefault()
-                                const direction = e.key === "ArrowLeft" ? -1 : 1
-                                const nextIndex = (index + direction + DEFAULT_COVERS.length) % DEFAULT_COVERS.length
-                                const nextCoverButton = e.currentTarget.parentElement?.children[
-                                  nextIndex
-                                ] as HTMLElement
-                                if (nextCoverButton) {
-                                  nextCoverButton.focus()
-                                }
-                              }
-                            }}
-                            className={`relative w-16 h-24 border-2 rounded overflow-hidden focus:outline-none focus:ring-2 focus:ring-purple-400 ${
-                              isSelected ? "border-purple-500 shadow-md" : "border-gray-300"
-                            }`}
-                            aria-label={`Select default cover ${index + 1}`}
-                            aria-pressed={isSelected}
-                            role="radio"
-                          >
-                            <Image
-                              src={cover || "/placeholder.svg"}
-                              alt={`Default cover ${index + 1}`}
-                              fill
-                              className="object-cover"
-                              sizes="64px"
-                            />
-                          </motion.button>
-                        )
-                      })}
-                    </div>
-                  </fieldset>
-                </div>
-
-                {/* Cover Preview */}
-                <div className="mt-4">
-                  <p className="block text-sm font-medium text-gray-700 mb-2">Cover Preview</p>
-                  <motion.div
-                    whileHover={{ scale: 1.02 }}
-                    transition={{ type: "spring", stiffness: 300 }}
-                    className="relative w-40 h-56 mx-auto border rounded-md overflow-hidden shadow-md"
-                    aria-label="Book cover preview"
-                  >
-                    {formState.selectedImage ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={formState.selectedImage || "/placeholder.svg"}
-                        alt="Book cover preview"
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <Image
-                        src={formState.book.image || "/placeholder.svg"}
-                        alt="Book cover preview"
-                        fill
-                        className="object-cover"
-                        sizes="160px"
-                      />
-                    )}
-                  </motion.div>
+                  <div className="p-2 hover:bg-gray-100 rounded cursor-pointer">
+                    <p className="font-medium text-[#3A2E39]">#ReactJS</p>
+                    <p className="text-xs text-gray-500">856 posts</p>
+                  </div>
+                  <div className="p-2 hover:bg-gray-100 rounded cursor-pointer">
+                    <p className="font-medium text-[#3A2E39]">#NextJS</p>
+                    <p className="text-xs text-gray-500">643 posts</p>
+                  </div>
                 </div>
               </div>
             </div>
+
+            {/* Main content */}
+            <div className="w-full md:w-3/4">
+              <div className="mb-6 p-6 bg-white rounded-xl shadow-lg border-l-4 border-[#EDB183]">
+                <h2 className="text-2xl font-semibold mb-4 text-[#3A2E39]">Create a Post</h2>
+                <form onSubmit={handleNewPostSubmit} className="space-y-4">
+                  <textarea
+                    className="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#EDB183] text-[#3A2E39]"
+                    rows={4}
+                    placeholder="What's on your mind?"
+                    value={newPostContent}
+                    onChange={handleNewPostChange}
+                  />
+                  <button
+                    type="submit"
+                    className="flex items-center justify-center w-full px-6 py-3 bg-[#EDB183] text-[#3A2E39] font-bold rounded-lg shadow hover:bg-[#F15152] hover:text-white transition-colors"
+                  >
+                    <Send size={20} className="mr-2" /> Post
+                  </button>
+                </form>
+              </div>
+              <div className="space-y-6">
+                {posts.map((post) => (
+                  <PostCard
+                    key={post.id}
+                    post={post}
+                    onToggleLike={() => togglePostLike(post.id)}
+                    onAddComment={(commentText) => addComment(post.id, commentText)}
+                    onLikeComment={(commentId: number) => likeComment(post.id, commentId)}
+                  />
+                ))}
+              </div>
+            </div>
           </div>
-
-          {/* Form Actions */}
-          <div className="px-6 py-4 bg-gradient-to-r from-purple-50 to-purple-100 flex justify-end gap-2">
-            {formState.editing && (
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => {
-                  dispatch({ type: "RESET_FORM" })
-                  // Focus the first input after canceling
-                  setTimeout(() => {
-                    document.getElementById("title")?.focus()
-                  }, 0)
-                }}
-                className={`px-4 py-2 ${SECONDARY_BUTTON}`}
-                aria-label="Cancel editing"
-                type="button"
-              >
-                Cancel
-              </motion.button>
-            )}
-
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => {
-                handleSubmit()
-                // If successful (no validation errors), focus the title input
-                if (!formState.errors.title && !formState.errors.author && !formState.errors.description) {
-                  setTimeout(() => {
-                    document.getElementById("title")?.focus()
-                  }, 0)
-                }
-              }}
-              className={`px-4 py-2 ${PRIMARY_BUTTON} flex items-center`}
-              aria-label={formState.editing ? "Update book" : "Add book"}
-              type="button"
-            >
-              {formState.editing ? (
-                <>
-                  <Check className="mr-2 h-4 w-4" aria-hidden="true" />
-                  Update Book
-                </>
-              ) : (
-                <>
-                  <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
-                  Add Book
-                </>
-              )}
-            </motion.button>
+          <div
+            className={`fixed top-20 right-0 h-[calc(100vh-5rem)] w-full md:w-96 shadow-2xl transform transition-transform duration-300 z-50 ${
+              isMessagesPanelOpen ? "translate-x-0" : "translate-x-full"
+            }`}
+            style={{ background: "#1E555C", color: "#F4D8CD" }}
+          >
+            <MessagesPanel
+              availableUsers={availableUsers}
+              onSendMessage={sendMessage}
+              onClose={() => setIsMessagesPanelOpen(false)}
+            />
           </div>
-        </motion.section>
-
-        {/* Book List Section */}
-        <motion.section
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5, delay: 0.3 }}
-          className="grid gap-8 md:grid-cols-2 lg:grid-cols-3"
-          aria-label="Book collection"
-        >
-          <AnimatePresence>
-            {books.length > 0 ? (
-              books.map((book) => (
-                <motion.article
-                  key={book.id}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  transition={{ duration: 0.3 }}
-                  whileHover={{ y: -5 }}
-                  className="bg-white rounded-lg shadow-md overflow-hidden transition-all hover:shadow-xl border border-gray-100 focus-within:ring-2 focus-within:ring-purple-400 focus-within:ring-offset-2"
-                  tabIndex={0} // Make the card focusable
-                  onKeyDown={(e) => {
-                    // Allow activation of the card with Enter or Space
-                    if (e.key === "Enter" || e.key === " ") {
-                      // Focus the first button in the card
-                      const firstButton = e.currentTarget.querySelector("button")
-                      if (firstButton) {
-                        e.preventDefault()
-                        firstButton.focus()
-                      }
-                    }
-                  }}
-                >
-                  <div className="relative h-64 w-full overflow-hidden group">
-                    {book.image.startsWith("data:") ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={book.image || "/placeholder.svg"}
-                        alt={`Cover of ${book.title}`}
-                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                      />
-                    ) : (
-                      <Image
-                        src={book.image || "/placeholder.svg"}
-                        alt={`Cover of ${book.title}`}
-                        fill
-                        className="object-cover transition-transform duration-300 group-hover:scale-105"
-                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                      />
-                    )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                  </div>
-
-                  <div className="p-6">
-                    <h2 className={`text-xl font-semibold mb-1 ${playfair.className} text-gray-900`}>{book.title}</h2>
-                    <p className="text-sm text-purple-600 mb-2 font-medium">by {book.author}</p>
-                    <p className="text-gray-700 line-clamp-3">{book.description}</p>
-                  </div>
-
-                  <div className="px-6 py-4 bg-gray-50 flex justify-between">
-                    <div className="flex space-x-2">
-                      <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => editBook(book)}
-                        className={`inline-flex items-center px-3 py-1.5 ${SECONDARY_BUTTON}`}
-                        aria-label={`Edit ${book.title}`}
-                      >
-                        <Edit className="h-4 w-4 mr-1" aria-hidden="true" />
-                        <span>Edit</span>
-                      </motion.button>
-
-                      <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => deleteBook(book.id)}
-                        className={`inline-flex items-center px-3 py-1.5 ${DANGER_BUTTON}`}
-                        aria-label={`Delete ${book.title}`}
-                      >
-                        <Trash className="h-4 w-4 mr-1" aria-hidden="true" />
-                        <span>Delete</span>
-                      </motion.button>
-                    </div>
-
-                    <motion.button
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      className={`inline-flex items-center px-3 py-1.5 ${PRIMARY_BUTTON}`}
-                      aria-label={`Buy ${book.title}`}
-                    >
-                      <ShoppingCart className="h-4 w-4 mr-1" aria-hidden="true" />
-                      <span>Buy</span>
-                    </motion.button>
-                  </div>
-                </motion.article>
-              ))
-            ) : (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="col-span-full text-center py-10 text-gray-500"
-              >
-                <p>No books in your collection yet. Add your first book above!</p>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </motion.section>
-      </div>
-
-      {/* Status announcements for screen readers */}
-      <div aria-live="polite" className="sr-only" role="status">
-        {formState.editing ? "Editing book: " + formState.book.title : "Adding a new book"}
-        {books.length === 0 && "Your book collection is empty. Use the form to add your first book."}
-        {books.length === 1 && "Your collection has 1 book."}
-        {books.length > 1 && `Your collection has ${books.length} books.`}
-      </div>
-
-      {/* Toast Notifications */}
-      <AnimatePresence>
-        {toast.show && <Toast message={toast.message} type={toast.type} onClose={hideToast} />}
-      </AnimatePresence>
+          <div
+            className={`fixed top-20 right-0 h-[calc(100vh-5rem)] w-full md:w-96 shadow-2xl transform transition-transform duration-300 z-50 ${
+              isFriendRequestsOpen ? "translate-x-0" : "translate-x-full"
+            }`}
+            style={{ background: "#1E555C", color: "#F4D8CD" }}
+          >
+            <FriendRequestsPanel
+              availableUsers={availableUsers}
+              onSendFriendRequest={sendFriendRequest}
+              onRespondFriendRequest={respondFriendRequest}
+              onClose={() => setIsFriendRequestsOpen(false)}
+            />
+          </div>
+          <footer className="bg-[#3A2E39] text-[#F4D8CD] mt-12 py-8">
+            <div className="max-w-7xl mx-auto px-4 md:px-6">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+                <div>
+                  <h3 className="text-xl font-bold mb-4">Modern Social</h3>
+                  <p className="text-sm">
+                    Connecting people around the world through shared interests and meaningful conversations.
+                  </p>
+                </div>
+                <div>
+                  <h4 className="font-bold mb-4">Company</h4>
+                  <ul className="space-y-2">
+                    <li>
+                      <a href="#" className="text-sm hover:text-[#EDB183]">
+                        About Us
+                      </a>
+                    </li>
+                    <li>
+                      <a href="#" className="text-sm hover:text-[#EDB183]">
+                        Careers
+                      </a>
+                    </li>
+                    <li>
+                      <a href="#" className="text-sm hover:text-[#EDB183]">
+                        Press
+                      </a>
+                    </li>
+                    <li>
+                      <a href="#" className="text-sm hover:text-[#EDB183]">
+                        Contact
+                      </a>
+                    </li>
+                  </ul>
+                </div>
+                <div>
+                  <h4 className="font-bold mb-4">Resources</h4>
+                  <ul className="space-y-2">
+                    <li>
+                      <a href="#" className="text-sm hover:text-[#EDB183]">
+                        Blog
+                      </a>
+                    </li>
+                    <li>
+                      <a href="#" className="text-sm hover:text-[#EDB183]">
+                        Help Center
+                      </a>
+                    </li>
+                    <li>
+                      <a href="#" className="text-sm hover:text-[#EDB183]">
+                        Community Guidelines
+                      </a>
+                    </li>
+                    <li>
+                      <a href="#" className="text-sm hover:text-[#EDB183]">
+                        Developers
+                      </a>
+                    </li>
+                  </ul>
+                </div>
+                <div>
+                  <h4 className="font-bold mb-4">Legal</h4>
+                  <ul className="space-y-2">
+                    <li>
+                      <a href="#" className="text-sm hover:text-[#EDB183]">
+                        Terms of Service
+                      </a>
+                    </li>
+                    <li>
+                      <a href="#" className="text-sm hover:text-[#EDB183]">
+                        Privacy Policy
+                      </a>
+                    </li>
+                    <li>
+                      <a href="#" className="text-sm hover:text-[#EDB183]">
+                        Cookie Policy
+                      </a>
+                    </li>
+                    <li>
+                      <a href="#" className="text-sm hover:text-[#EDB183]">
+                        Accessibility
+                      </a>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+              <div className="border-t border-gray-700 mt-8 pt-8 text-center">
+                <p className="text-sm">
+                  &copy; {new Date().getFullYear()} Modern Social Platform, Inc. All rights reserved.
+                </p>
+              </div>
+            </div>
+          </footer>
+        </>
+      )}
     </div>
+  )
+}
+
+function PostCard({
+  post,
+  onToggleLike,
+  onAddComment,
+  onLikeComment,
+}: {
+  post: Post
+  onToggleLike: () => void
+  onAddComment: (commentText: string) => void
+  onLikeComment: (commentId: number) => void
+}) {
+  const [commentInput, setCommentInput] = useState("")
+  const handleCommentSubmit = (e: FormEvent) => {
+    e.preventDefault()
+    onAddComment(commentInput)
+    setCommentInput("")
+  }
+  return (
+    <div className="p-6 bg-white rounded-xl shadow-lg border-l-4 border-[#EDB183]">
+      <div className="flex items-center space-x-3 mb-4">
+        <div className="w-12 h-12 rounded-full bg-[#EDB183] flex items-center justify-center">
+          <User size={24} className="text-[#3A2E39]" />
+        </div>
+        <span className="text-xl font-bold text-[#3A2E39]">{post.user}</span>
+      </div>
+      <p className="text-xl text-[#3A2E39] mb-4">{post.content}</p>
+      <div className="space-y-3 mb-4">
+        {post.comments.map((com) => (
+          <div key={com.id} className="flex items-start space-x-3 p-3 bg-gray-100 rounded-md">
+            <div className="w-8 h-8 rounded-full bg-[#EDB183] flex items-center justify-center">
+              <User size={16} className="text-[#3A2E39]" />
+            </div>
+            <div className="flex flex-col flex-grow">
+              <p className="text-sm font-semibold text-[#3A2E39]">{com.user}</p>
+              <p className="text-sm text-gray-700">{com.text}</p>
+              <div className="flex items-center space-x-1 mt-1">
+                <Heart
+                  size={20}
+                  onClick={() => onLikeComment(com.id)}
+                  className="cursor-pointer rounded-full p-1 transition-colors duration-300 hover:bg-pink-600 hover:bg-opacity-20"
+                  fill={com.liked ? "#F15152" : "none"}
+                  stroke="#F15152"
+                />
+                <span className="text-xs text-gray-600">{formatLikes(com.likes)}</span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <form onSubmit={handleCommentSubmit} className="flex space-x-3 mb-4">
+        <input
+          type="text"
+          className="flex-1 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#EDB183] text-[#3A2E39]"
+          placeholder="Add a comment..."
+          value={commentInput}
+          onChange={(e) => setCommentInput(e.target.value)}
+        />
+        <button
+          type="submit"
+          className="flex items-center justify-center px-4 py-3 bg-[#EDB183] text-[#3A2E39] rounded-lg shadow hover:bg-[#F15152] hover:text-white transition-colors"
+        >
+          <Send size={20} />
+        </button>
+      </form>
+      <div className="flex items-center justify-between border-t border-gray-200 pt-3">
+        <div className="flex items-center space-x-6">
+          <div className="flex items-center space-x-1">
+            <Heart
+              size={30}
+              onClick={onToggleLike}
+              className="cursor-pointer rounded-full p-1 transition-colors duration-300 hover:bg-pink-600 hover:bg-opacity-20"
+              fill={post.liked ? "#F15152" : "none"}
+              stroke="#F15152"
+            />
+            <span className="text-sm text-[#3A2E39]">{formatLikes(post.likes)}</span>
+          </div>
+          <div className="flex items-center space-x-1">
+            <MessageCircle size={20} className="text-[#3A2E39]" />
+            <span className="text-sm text-[#3A2E39]">{post.comments.length}</span>
+          </div>
+        </div>
+        <span className="text-sm text-gray-500">{timeSince(post.createdAt)} ago</span>
+      </div>
+    </div>
+  )
+}
+
+type MessagesPanelProps = {
+  availableUsers: string[]
+  onSendMessage: (to: string, content: string) => void
+  onClose: () => void
+}
+
+function MessagesPanel({ availableUsers, onSendMessage, onClose }: MessagesPanelProps) {
+  const { privateMessages } = useAppContext()
+  const [selectedRecipient, setSelectedRecipient] = useState(availableUsers.find((u) => u !== "You") || "")
+  const [messageInput, setMessageInput] = useState("")
+
+  const conversation = privateMessages.filter(
+    (msg) =>
+      (msg.from === "You" && msg.to === selectedRecipient) || (msg.from === selectedRecipient && msg.to === "You"),
+  )
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault()
+    if (!messageInput.trim()) return
+    onSendMessage(selectedRecipient, messageInput)
+    setMessageInput("")
+  }
+
+  return (
+    <div className="flex flex-col h-full p-4 z-50">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-bold">Messages</h2>
+        <button
+          onClick={onClose}
+          className="px-2 py-1 bg-[#EDB183] text-[#3A2E39] rounded hover:bg-[#F15152] hover:text-white transition-colors"
+        >
+          <X size={20} />
+        </button>
+      </div>
+
+      <select
+        className="mb-4 p-2 border rounded bg-[#F4D8CD] text-[#3A2E39]"
+        value={selectedRecipient}
+        onChange={(e) => setSelectedRecipient(e.target.value)}
+      >
+        {availableUsers
+          .filter((u) => u !== "You")
+          .map((user) => (
+            <option key={user} value={user}>
+              {user}
+            </option>
+          ))}
+      </select>
+
+      <div className="flex-1 overflow-y-auto space-y-2 pr-1 mb-4">
+        {conversation.map((msg) => (
+          <div
+            key={msg.id}
+            className={`p-2 rounded max-w-[80%] ${
+              msg.from === "You"
+                ? "ml-auto text-right bg-[#EDB183] text-[#3A2E39]"
+                : "mr-auto text-left bg-[#F15152] text-white"
+            }`}
+          >
+            <p className="text-sm break-words">{msg.content}</p>
+            <span className="text-xs block mt-1 opacity-70">{new Date(msg.createdAt).toLocaleTimeString()}</span>
+          </div>
+        ))}
+      </div>
+
+      <form onSubmit={handleSubmit} className="mt-auto sticky bottom-0 bg-[#1E555C] pt-2">
+        <div className="flex space-x-2">
+          <input
+            type="text"
+            className="flex-1 p-2 border rounded bg-[#F4D8CD] text-[#3A2E39]"
+            placeholder="Type your message..."
+            value={messageInput}
+            onChange={(e) => setMessageInput(e.target.value)}
+          />
+          <button
+            type="submit"
+            className="p-2 bg-[#EDB183] text-[#3A2E39] rounded hover:bg-[#F15152] hover:text-white transition-colors"
+          >
+            <Send size={20} />
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+type FriendRequestsPanelProps = {
+  availableUsers: string[]
+  onSendFriendRequest: (to: string) => void
+  onRespondFriendRequest: (requestId: number, response: "accepted" | "declined") => void
+  onClose: () => void
+}
+
+function FriendRequestsPanel({
+  availableUsers,
+  onSendFriendRequest,
+  onRespondFriendRequest,
+  onClose,
+}: FriendRequestsPanelProps) {
+  const { friendRequests } = useAppContext()
+  const sentRequests = friendRequests.filter((req) => req.from === "You")
+  const receivedRequests = friendRequests.filter((req) => req.to === "You" && req.status === "pending")
+  return (
+    <div className="flex flex-col h-full p-4">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-bold">Friend Requests</h2>
+        <button
+          onClick={onClose}
+          className="px-2 py-1 bg-[#EDB183] text-[#3A2E39] rounded hover:bg-[#F15152] hover:text-white transition-colors"
+        >
+          <X size={20} />
+        </button>
+      </div>
+      <h3 className="text-lg mb-2">Send Request</h3>
+      <div className="space-y-2 mb-4">
+        {availableUsers
+          .filter((u) => u !== "You")
+          .map((user) => {
+            const request = sentRequests.find((r) => r.to === user)
+            return (
+              <div
+                key={user}
+                className="flex items-center justify-between p-2 border rounded bg-[#F4D8CD] text-[#3A2E39]"
+              >
+                <span>{user}</span>
+                {request ? (
+                  <span className="text-gray-500 text-sm">
+                    {request.status === "pending" ? "Pending" : request.status}
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => onSendFriendRequest(user)}
+                    className="px-3 py-1 bg-[#EDB183] text-[#3A2E39] rounded hover:bg-[#F15152] hover:text-white transition-colors"
+                  >
+                    <UserPlus size={18} />
+                  </button>
+                )}
+              </div>
+            )
+          })}
+      </div>
+      <h3 className="text-lg mb-2">Received</h3>
+      <div className="space-y-2">
+        {receivedRequests.length === 0 ? (
+          <p className="text-sm text-gray-500">No requests.</p>
+        ) : (
+          receivedRequests.map((req) => (
+            <div
+              key={req.id}
+              className="flex items-center justify-between p-2 border rounded bg-[#F4D8CD] text-[#3A2E39]"
+            >
+              <span>{req.from}</span>
+              <div className="space-x-2">
+                <button
+                  onClick={() => onRespondFriendRequest(req.id, "accepted")}
+                  className="px-3 py-1 bg-[#EDB183] text-[#3A2E39] rounded hover:bg-[#F15152] hover:text-white transition-colors"
+                >
+                  <UserPlus size={18} />
+                </button>
+                <button
+                  onClick={() => onRespondFriendRequest(req.id, "declined")}
+                  className="px-3 py-1 bg-[#EDB183] text-[#3A2E39] rounded hover:bg-[#F15152] hover:text-white transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  )
+}
+
+export default function Home() {
+  return (
+    <AppProvider>
+      <HomeContent />
+    </AppProvider>
   )
 }
