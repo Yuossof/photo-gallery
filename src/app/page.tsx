@@ -1,290 +1,263 @@
 "use client"
 
-import type React from "react"
-
 import { useState } from "react"
-import { ClipboardList, Package, Users, Clock, CheckCircle2, Loader2, ChevronDown } from "lucide-react"
+import { Heart, Pencil, Trash2, Plus, Save, X } from "lucide-react"
 
-// Define types for better type safety
-type OrderStatus = "pending" | "in_progress" | "delivered"
-type StaffRole = "manager" | "waiter" | "chef"
-
-interface Order {
+interface Flower {
   id: number
   name: string
-  status: OrderStatus
-  customer: string
-  total: string
+  price: number
+  favorite: boolean
 }
 
-interface InventoryItem {
-  id: number
-  name: string
-  quantity: number
-  unit: string
-}
-
-interface StaffMember {
-  id: number
-  name: string
-  role: StaffRole
-  shift: string
-}
-
-// Reusable section
-interface SectionProps {
-  title: string
-  icon: React.ReactNode
-  borderColor: string
-  bgColor: string
-  children: React.ReactNode
-}
-
-const Section: React.FC<SectionProps> = ({ title, icon, borderColor, bgColor, children }) => (
-  <div className={`bg-white rounded-lg border ${borderColor} shadow-md overflow-hidden`}>
-    <div className={`${bgColor} border-b ${borderColor} px-4 py-3`}>
-      <h2 className="flex items-center gap-2 font-semibold">
-        {icon}
-        {title}
-      </h2>
-    </div>
-    <div className="p-4">{children}</div>
-  </div>
-)
-
-// Status badge
-const StatusBadge: React.FC<{ status: OrderStatus }> = ({ status }) => {
-  switch (status) {
-    case "pending":
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-          <Clock className="w-3 h-3" aria-hidden="true" /> Pending
-        </span>
-      )
-    case "in_progress":
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-          <Loader2 className="w-3 h-3 animate-spin" aria-hidden="true" /> In Progress
-        </span>
-      )
-    case "delivered":
-      return (
-        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-green-50 text-green-700 border border-green-200">
-          <CheckCircle2 className="w-3 h-3" aria-hidden="true" /> Delivered
-        </span>
-      )
-    default:
-      return <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-800">{status}</span>
-  }
-}
-
-// Order item
-interface OrderItemProps {
-  order: Order
-  onStatusChange: (id: number, status: OrderStatus) => void
-}
-
-const OrderItem: React.FC<OrderItemProps> = ({ order, onStatusChange }) => (
-  <div className="p-3 border border-amber-100 rounded-lg bg-white">
-    <div className="flex justify-between items-center mb-2">
-      <span className="font-medium">{order.name}</span>
-      <StatusBadge status={order.status} />
-    </div>
-    <div className="text-sm text-gray-500 mb-3">
-      <div>Customer: {order.customer}</div>
-      <div>Total: {order.total}</div>
-    </div>
-    <div className="relative">
-      <label htmlFor={`order-status-${order.id}`} className="sr-only">
-        Change order status
-      </label>
-      <select
-        id={`order-status-${order.id}`}
-        value={order.status}
-        onChange={(e) => onStatusChange(order.id, e.target.value as OrderStatus)}
-        className="w-full px-3 py-2 bg-white border border-amber-200 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-300 focus:border-amber-300 appearance-none"
-        aria-label={`Change status for ${order.name}`}
-      >
-        <option value="pending">Pending</option>
-        <option value="in_progress">In Progress</option>
-        <option value="delivered">Delivered</option>
-      </select>
-      <ChevronDown className="absolute right-3 top-2.5 h-4 w-4 text-amber-500 pointer-events-none" aria-hidden="true" />
-    </div>
-  </div>
-)
-
-// Inventory item
-interface InventoryItemProps {
-  item: InventoryItem
-  onQuantityChange: (id: number, quantity: number) => void
-}
-
-const InventoryItemComponent: React.FC<InventoryItemProps> = ({ item, onQuantityChange }) => (
-  <div className="p-3 border border-green-100 rounded-lg bg-white">
-    <div className="flex justify-between items-center mb-2">
-      <span className="font-medium">{item.name}</span>
-      <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-green-50 text-green-700 border border-green-200">
-        {item.unit}
-      </span>
-    </div>
-    <div className="flex items-center gap-2">
-      <label htmlFor={`inventory-quantity-${item.id}`} className="sr-only">
-        Quantity for {item.name}
-      </label>
-      <input
-        id={`inventory-quantity-${item.id}`}
-        type="number"
-        value={item.quantity}
-        onChange={(e) => onQuantityChange(item.id, Number.parseInt(e.target.value))}
-        className="w-full px-3 py-2 bg-white border border-green-200 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-300"
-        min="0"
-        aria-label={`Change quantity for ${item.name}`}
-      />
-      <span className="text-sm text-gray-500">in stock</span>
-    </div>
-  </div>
-)
-
-// Staff member
-interface StaffItemProps {
-  member: StaffMember
-  onRoleChange: (id: number, role: StaffRole) => void
-}
-
-const StaffItem: React.FC<StaffItemProps> = ({ member, onRoleChange }) => (
-  <div className="p-3 border border-blue-100 rounded-lg bg-white">
-    <div className="flex justify-between items-center mb-2">
-      <span className="font-medium">{member.name}</span>
-      <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-        {member.shift}
-      </span>
-    </div>
-    <div className="relative">
-      <label htmlFor={`staff-role-${member.id}`} className="sr-only">
-        Change role for {member.name}
-      </label>
-      <select
-        id={`staff-role-${member.id}`}
-        value={member.role}
-        onChange={(e) => onRoleChange(member.id, e.target.value as StaffRole)}
-        className="w-full px-3 py-2 bg-white border border-blue-200 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-300 appearance-none"
-        aria-label={`Change role for ${member.name}`}
-      >
-        <option value="manager">Manager</option>
-        <option value="waiter">Waiter</option>
-        <option value="chef">Chef</option>
-      </select>
-      <ChevronDown className="absolute right-3 top-2.5 h-4 w-4 text-blue-500 pointer-events-none" aria-hidden="true" />
-    </div>
-  </div>
-)
-
-const RestaurantManagementSystem: React.FC = () => {
-  const [orders, setOrders] = useState<Order[]>([
-    { id: 1, name: "Order #1001", status: "pending", customer: "John Doe", total: "$45.50" },
-    { id: 2, name: "Order #1002", status: "in_progress", customer: "Jane Smith", total: "$32.75" },
-    { id: 3, name: "Order #1003", status: "delivered", customer: "Robert Johnson", total: "$78.25" },
+export default function FlowerStore() {
+  const [flowers, setFlowers] = useState<Flower[]>([
+    { id: 1, name: "Rose", price: 10.99, favorite: false },
+    { id: 2, name: "Lily", price: 9.99, favorite: false },
+    { id: 3, name: "Sunflower", price: 12.99, favorite: false },
   ])
 
-  const [inventory, setInventory] = useState<InventoryItem[]>([
-    { id: 1, name: "Tomatoes", quantity: 10, unit: "kg" },
-    { id: 2, name: "Chicken", quantity: 20, unit: "kg" },
-    { id: 3, name: "Olive Oil", quantity: 30, unit: "bottles" },
-  ])
+  const [newFlower, setNewFlower] = useState<Omit<Flower, "id" | "favorite">>({ name: "", price: 0 })
+  const [updateFlower, setUpdateFlower] = useState<Flower | null>(null)
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [isUpdateDialogOpen, setIsUpdateDialogOpen] = useState(false)
 
-  const [staff, setStaff] = useState<StaffMember[]>([
-    { id: 1, name: "Ahmed Hassan", role: "manager", shift: "Morning" },
-    { id: 2, name: "Sara Ali", role: "waiter", shift: "Evening" },
-    { id: 3, name: "Mohamed Kamal", role: "chef", shift: "Full day" },
-  ])
-
-  const handleOrderStatusChange = (id: number, status: OrderStatus) => {
-    setOrders(
-      orders.map((order) => {
-        if (order.id === id) {
-          return { ...order, status }
-        }
-        return order
-      }),
-    )
+  const handleAddFlower = () => {
+    if (newFlower.name && newFlower.price > 0) {
+      setFlowers([
+        ...flowers,
+        {
+          id: Math.max(0, ...flowers.map((f) => f.id)) + 1,
+          name: newFlower.name,
+          price: newFlower.price,
+          favorite: false,
+        },
+      ])
+      setNewFlower({ name: "", price: 0 })
+      setIsAddDialogOpen(false)
+    }
   }
 
-  const handleInventoryQuantityChange = (id: number, quantity: number) => {
-    setInventory(
-      inventory.map((item) => {
-        if (item.id === id) {
-          return { ...item, quantity }
-        }
-        return item
-      }),
-    )
+  const handleUpdateFlower = (id: number) => {
+    const flowerToUpdate = flowers.find((flower) => flower.id === id)
+    if (flowerToUpdate) {
+      setUpdateFlower(flowerToUpdate)
+      setIsUpdateDialogOpen(true)
+    }
   }
 
-  const handleStaffRoleChange = (id: number, role: StaffRole) => {
-    setStaff(
-      staff.map((member) => {
-        if (member.id === id) {
-          return { ...member, role }
-        }
-        return member
-      }),
+  const handleSaveUpdateFlower = () => {
+    if (updateFlower && updateFlower.name && updateFlower.price > 0) {
+      const updatedFlowers = flowers.map((flower) => (flower.id === updateFlower.id ? updateFlower : flower))
+      setFlowers(updatedFlowers)
+      setUpdateFlower(null)
+      setIsUpdateDialogOpen(false)
+    }
+  }
+
+  const handleDeleteFlower = (id: number) => {
+    const filteredFlowers = flowers.filter((flower) => flower.id !== id)
+    setFlowers(filteredFlowers)
+  }
+
+  const handleFavoriteFlower = (id: number) => {
+    const updatedFlowers = flowers.map((flower) =>
+      flower.id === id ? { ...flower, favorite: !flower.favorite } : flower,
     )
+    setFlowers(updatedFlowers)
   }
 
   return (
-    <div className="container mx-auto p-4 pt-6 mt-4 bg-gradient-to-b from-amber-50 to-white min-h-screen">
-      <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-amber-800">Restaurant Management System</h1>
-        <p className="text-amber-600 mt-2">Manage orders, inventory, and staff efficiently</p>
+    <main className="min-h-screen bg-gradient-to-b from-rose-50 to-white p-4 md:p-8">
+      <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-xl overflow-hidden border border-rose-100">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-rose-500 to-pink-500 text-white p-6 rounded-t-xl">
+          <h1 className="text-3xl font-bold flex items-center gap-2">
+            <span>🌸</span> Flower Store
+          </h1>
+        </div>
+
+        {/* Content */}
+        <div className="p-6">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-semibold text-gray-700">Flower Collection</h2>
+            <button
+              onClick={() => setIsAddDialogOpen(true)}
+              className="bg-rose-500 hover:bg-rose-600 text-white px-4 py-2 rounded-md flex items-center gap-2 transition-colors"
+            >
+              <Plus className="h-4 w-4" /> Add Flower
+            </button>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            {flowers.length === 0 ? (
+              <p className="text-gray-500 col-span-2 text-center py-8">No flowers added yet. Add your first flower!</p>
+            ) : (
+              flowers.map((flower) => (
+                <div
+                  key={flower.id}
+                  className={`bg-white rounded-lg p-4 border ${flower.favorite ? "border-rose-300 shadow-rose-100 shadow-md" : "border-gray-200"} transition-all duration-300`}
+                >
+                  <div className="flex justify-between items-center mb-2">
+                    <h3 className="font-semibold text-lg">{flower.name}</h3>
+                    {flower.favorite && (
+                      <span className="bg-rose-100 text-rose-500 text-xs px-2 py-1 rounded-full">Favorite</span>
+                    )}
+                  </div>
+                  <p className="text-xl font-bold text-gray-700 mb-4">${flower.price.toFixed(2)}</p>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => handleFavoriteFlower(flower.id)}
+                      className={`p-2 rounded-md border ${flower.favorite ? "text-rose-500 border-rose-200" : "text-gray-400 border-gray-200"} hover:bg-gray-50`}
+                    >
+                      <Heart className={`h-4 w-4 ${flower.favorite ? "fill-rose-500" : ""}`} />
+                    </button>
+                    <button
+                      onClick={() => handleUpdateFlower(flower.id)}
+                      className="p-2 rounded-md border text-amber-500 border-amber-200 hover:bg-gray-50"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteFlower(flower.id)}
+                      className="p-2 rounded-md border text-red-500 border-red-200 hover:bg-gray-50"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-        {/* Orders Section */}
-        <Section
-          title="Orders"
-          icon={<ClipboardList className="h-5 w-5 text-amber-800" />}
-          borderColor="border-amber-200"
-          bgColor="bg-amber-100"
-        >
-          <div className="space-y-4">
-            {orders.map((order) => (
-              <OrderItem key={order.id} order={order} onStatusChange={handleOrderStatusChange} />
-            ))}
+      {/* Add Flower Dialog */}
+      {isAddDialogOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full">
+            <div className="flex justify-between items-center p-4 border-b">
+              <h2 className="text-xl font-semibold">Add New Flower</h2>
+              <button onClick={() => setIsAddDialogOpen(false)} className="text-gray-500 hover:text-gray-700">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div className="space-y-2">
+                <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+                  Flower Name
+                </label>
+                <input
+                  id="name"
+                  type="text"
+                  value={newFlower.name}
+                  onChange={(e) => setNewFlower({ ...newFlower, name: e.target.value })}
+                  placeholder="Enter flower name"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-transparent"
+                />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="price" className="block text-sm font-medium text-gray-700">
+                  Price ($)
+                </label>
+                <input
+                  id="price"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={newFlower.price || ""}
+                  onChange={(e) => setNewFlower({ ...newFlower, price: Number(e.target.value) })}
+                  placeholder="Enter price"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 p-4 border-t">
+              <button
+                onClick={() => setIsAddDialogOpen(false)}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddFlower}
+                className={`px-4 py-2 rounded-md text-white ${
+                  !newFlower.name || newFlower.price <= 0
+                    ? "bg-gray-300 cursor-not-allowed"
+                    : "bg-rose-500 hover:bg-rose-600"
+                }`}
+                disabled={!newFlower.name || newFlower.price <= 0}
+              >
+                Add Flower
+              </button>
+            </div>
           </div>
-        </Section>
+        </div>
+      )}
 
-        {/* Inventory Section */}
-        <Section
-          title="Inventory"
-          icon={<Package className="h-5 w-5 text-green-800" />}
-          borderColor="border-green-200"
-          bgColor="bg-green-100"
-        >
-          <div className="space-y-4">
-            {inventory.map((item) => (
-              <InventoryItemComponent key={item.id} item={item} onQuantityChange={handleInventoryQuantityChange} />
-            ))}
+      {/* Update Flower Dialog */}
+      {isUpdateDialogOpen && updateFlower && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-md w-full">
+            <div className="flex justify-between items-center p-4 border-b">
+              <h2 className="text-xl font-semibold">Update Flower</h2>
+              <button onClick={() => setIsUpdateDialogOpen(false)} className="text-gray-500 hover:text-gray-700">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div className="space-y-2">
+                <label htmlFor="update-name" className="block text-sm font-medium text-gray-700">
+                  Flower Name
+                </label>
+                <input
+                  id="update-name"
+                  type="text"
+                  value={updateFlower.name}
+                  onChange={(e) => setUpdateFlower({ ...updateFlower, name: e.target.value })}
+                  placeholder="Enter flower name"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-transparent"
+                />
+              </div>
+              <div className="space-y-2">
+                <label htmlFor="update-price" className="block text-sm font-medium text-gray-700">
+                  Price ($)
+                </label>
+                <input
+                  id="update-price"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={updateFlower.price || ""}
+                  onChange={(e) => setUpdateFlower({ ...updateFlower, price: Number(e.target.value) })}
+                  placeholder="Enter price"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 p-4 border-t">
+              <button
+                onClick={() => setIsUpdateDialogOpen(false)}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveUpdateFlower}
+                className={`px-4 py-2 rounded-md text-white flex items-center gap-2 ${
+                  !updateFlower.name || updateFlower.price <= 0
+                    ? "bg-gray-300 cursor-not-allowed"
+                    : "bg-amber-500 hover:bg-amber-600"
+                }`}
+                disabled={!updateFlower.name || updateFlower.price <= 0}
+              >
+                <Save className="h-4 w-4" /> Save Changes
+              </button>
+            </div>
           </div>
-        </Section>
-
-        {/* Staff Section */}
-        <Section
-          title="Staff"
-          icon={<Users className="h-5 w-5 text-blue-800" />}
-          borderColor="border-blue-200"
-          bgColor="bg-blue-100"
-        >
-          <div className="space-y-4">
-            {staff.map((member) => (
-              <StaffItem key={member.id} member={member} onRoleChange={handleStaffRoleChange} />
-            ))}
-          </div>
-        </Section>
-      </div>
-    </div>
+        </div>
+      )}
+    </main>
   )
 }
-
-export default RestaurantManagementSystem
 
