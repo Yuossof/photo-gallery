@@ -1,5 +1,5 @@
+"use client"
 
-      "use client"
 import { createContext, useContext, useState, useEffect, type ChangeEvent, type FormEvent, type ReactNode } from "react"
 import { Heart, MessageSquare, Send, User, X, UserPlus, MessageCircle } from "lucide-react"
 
@@ -19,7 +19,7 @@ function timeSince(timestamp: number): string {
 }
 
 // Types
-export type CommentType = {
+type CommentType = {
   id: number
   user: string
   text: string
@@ -27,7 +27,7 @@ export type CommentType = {
   liked: boolean
 }
 
-export type Post = {
+type Post = {
   id: number
   user: string
   content: string
@@ -37,7 +37,7 @@ export type Post = {
   createdAt: number
 }
 
-export type PrivateMessage = {
+type PrivateMessage = {
   id: number
   from: string
   to: string
@@ -45,7 +45,7 @@ export type PrivateMessage = {
   createdAt: number
 }
 
-export type FriendRequest = {
+type FriendRequest = {
   id: number
   from: string
   to: string
@@ -71,7 +71,8 @@ type AppContextType = {
 
 const AppContext = createContext<AppContextType | undefined>(undefined)
 
-export const AppProvider = ({ children }: { children: ReactNode }) => {
+// This is now a regular function, not exported
+function AppProvider({ children }: { children: ReactNode }) {
   const [posts, setPosts] = useState<Post[]>([])
   const [privateMessages, setPrivateMessages] = useState<PrivateMessage[]>([])
   const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([])
@@ -246,10 +247,272 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   )
 }
 
-export const useAppContext = (): AppContextType => {
+// Hook to use the context
+function useAppContext(): AppContextType {
   const context = useContext(AppContext)
   if (!context) throw new Error("useAppContext must be used within an AppProvider")
   return context
+}
+
+function PostCard({
+  post,
+  onToggleLike,
+  onAddComment,
+  onLikeComment,
+}: {
+  post: Post
+  onToggleLike: () => void
+  onAddComment: (commentText: string) => void
+  onLikeComment: (commentId: number) => void
+}) {
+  const [commentInput, setCommentInput] = useState("")
+  const handleCommentSubmit = (e: FormEvent) => {
+    e.preventDefault()
+    onAddComment(commentInput)
+    setCommentInput("")
+  }
+  return (
+    <div className="p-6 bg-white rounded-xl shadow-lg border-l-4 border-[#EDB183]">
+      <div className="flex items-center space-x-3 mb-4">
+        <div className="w-12 h-12 rounded-full bg-[#EDB183] flex items-center justify-center">
+          <User size={24} className="text-[#3A2E39]" />
+        </div>
+        <span className="text-xl font-bold text-[#3A2E39]">{post.user}</span>
+      </div>
+      <p className="text-xl text-[#3A2E39] mb-4">{post.content}</p>
+      <div className="space-y-3 mb-4">
+        {post.comments.map((com) => (
+          <div key={com.id} className="flex items-start space-x-3 p-3 bg-gray-100 rounded-md">
+            <div className="w-8 h-8 rounded-full bg-[#EDB183] flex items-center justify-center">
+              <User size={16} className="text-[#3A2E39]" />
+            </div>
+            <div className="flex flex-col flex-grow">
+              <p className="text-sm font-semibold text-[#3A2E39]">{com.user}</p>
+              <p className="text-sm text-gray-700">{com.text}</p>
+              <div className="flex items-center space-x-1 mt-1">
+                <Heart
+                  size={20}
+                  onClick={() => onLikeComment(com.id)}
+                  className="cursor-pointer rounded-full p-1 transition-colors duration-300 hover:bg-pink-600 hover:bg-opacity-20"
+                  fill={com.liked ? "#F15152" : "none"}
+                  stroke="#F15152"
+                />
+                <span className="text-xs text-gray-600">{formatLikes(com.likes)}</span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <form onSubmit={handleCommentSubmit} className="flex space-x-3 mb-4">
+        <input
+          type="text"
+          className="flex-1 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#EDB183] text-[#3A2E39]"
+          placeholder="Add a comment..."
+          value={commentInput}
+          onChange={(e) => setCommentInput(e.target.value)}
+        />
+        <button
+          type="submit"
+          className="flex items-center justify-center px-4 py-3 bg-[#EDB183] text-[#3A2E39] rounded-lg shadow hover:bg-[#F15152] hover:text-white transition-colors"
+        >
+          <Send size={20} />
+        </button>
+      </form>
+      <div className="flex items-center justify-between border-t border-gray-200 pt-3">
+        <div className="flex items-center space-x-6">
+          <div className="flex items-center space-x-1">
+            <Heart
+              size={30}
+              onClick={onToggleLike}
+              className="cursor-pointer rounded-full p-1 transition-colors duration-300 hover:bg-pink-600 hover:bg-opacity-20"
+              fill={post.liked ? "#F15152" : "none"}
+              stroke="#F15152"
+            />
+            <span className="text-sm text-[#3A2E39]">{formatLikes(post.likes)}</span>
+          </div>
+          <div className="flex items-center space-x-1">
+            <MessageCircle size={20} className="text-[#3A2E39]" />
+            <span className="text-sm text-[#3A2E39]">{post.comments.length}</span>
+          </div>
+        </div>
+        <span className="text-sm text-gray-500">{timeSince(post.createdAt)} ago</span>
+      </div>
+    </div>
+  )
+}
+
+type MessagesPanelProps = {
+  availableUsers: string[]
+  onSendMessage: (to: string, content: string) => void
+  onClose: () => void
+}
+
+function MessagesPanel({ availableUsers, onSendMessage, onClose }: MessagesPanelProps) {
+  const { privateMessages } = useAppContext()
+  const [selectedRecipient, setSelectedRecipient] = useState(availableUsers.find((u) => u !== "You") || "")
+  const [messageInput, setMessageInput] = useState("")
+
+  const conversation = privateMessages.filter(
+    (msg) =>
+      (msg.from === "You" && msg.to === selectedRecipient) || (msg.from === selectedRecipient && msg.to === "You"),
+  )
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault()
+    if (!messageInput.trim()) return
+    onSendMessage(selectedRecipient, messageInput)
+    setMessageInput("")
+  }
+
+  return (
+    <div className="flex flex-col h-full p-4 z-50">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-bold">Messages</h2>
+        <button
+          onClick={onClose}
+          className="px-2 py-1 bg-[#EDB183] text-[#3A2E39] rounded hover:bg-[#F15152] hover:text-white transition-colors"
+        >
+          <X size={20} />
+        </button>
+      </div>
+
+      <select
+        className="mb-4 p-2 border rounded bg-[#F4D8CD] text-[#3A2E39]"
+        value={selectedRecipient}
+        onChange={(e) => setSelectedRecipient(e.target.value)}
+      >
+        {availableUsers
+          .filter((u) => u !== "You")
+          .map((user) => (
+            <option key={user} value={user}>
+              {user}
+            </option>
+          ))}
+      </select>
+
+      <div className="flex-1 overflow-y-auto space-y-2 pr-1 mb-4">
+        {conversation.map((msg) => (
+          <div
+            key={msg.id}
+            className={`p-2 rounded max-w-[80%] ${
+              msg.from === "You"
+                ? "ml-auto text-right bg-[#EDB183] text-[#3A2E39]"
+                : "mr-auto text-left bg-[#F15152] text-white"
+            }`}
+          >
+            <p className="text-sm break-words">{msg.content}</p>
+            <span className="text-xs block mt-1 opacity-70">{new Date(msg.createdAt).toLocaleTimeString()}</span>
+          </div>
+        ))}
+      </div>
+
+      <form onSubmit={handleSubmit} className="mt-auto sticky bottom-0 bg-[#1E555C] pt-2">
+        <div className="flex space-x-2">
+          <input
+            type="text"
+            className="flex-1 p-2 border rounded bg-[#F4D8CD] text-[#3A2E39]"
+            placeholder="Type your message..."
+            value={messageInput}
+            onChange={(e) => setMessageInput(e.target.value)}
+          />
+          <button
+            type="submit"
+            className="p-2 bg-[#EDB183] text-[#3A2E39] rounded hover:bg-[#F15152] hover:text-white transition-colors"
+          >
+            <Send size={20} />
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+type FriendRequestsPanelProps = {
+  availableUsers: string[]
+  onSendFriendRequest: (to: string) => void
+  onRespondFriendRequest: (requestId: number, response: "accepted" | "declined") => void
+  onClose: () => void
+}
+
+function FriendRequestsPanel({
+  availableUsers,
+  onSendFriendRequest,
+  onRespondFriendRequest,
+  onClose,
+}: FriendRequestsPanelProps) {
+  const { friendRequests } = useAppContext()
+  const sentRequests = friendRequests.filter((req) => req.from === "You")
+  const receivedRequests = friendRequests.filter((req) => req.to === "You" && req.status === "pending")
+  return (
+    <div className="flex flex-col h-full p-4">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-bold">Friend Requests</h2>
+        <button
+          onClick={onClose}
+          className="px-2 py-1 bg-[#EDB183] text-[#3A2E39] rounded hover:bg-[#F15152] hover:text-white transition-colors"
+        >
+          <X size={20} />
+        </button>
+      </div>
+      <h3 className="text-lg mb-2">Send Request</h3>
+      <div className="space-y-2 mb-4">
+        {availableUsers
+          .filter((u) => u !== "You")
+          .map((user) => {
+            const request = sentRequests.find((r) => r.to === user)
+            return (
+              <div
+                key={user}
+                className="flex items-center justify-between p-2 border rounded bg-[#F4D8CD] text-[#3A2E39]"
+              >
+                <span>{user}</span>
+                {request ? (
+                  <span className="text-gray-500 text-sm">
+                    {request.status === "pending" ? "Pending" : request.status}
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => onSendFriendRequest(user)}
+                    className="px-3 py-1 bg-[#EDB183] text-[#3A2E39] rounded hover:bg-[#F15152] hover:text-white transition-colors"
+                  >
+                    <UserPlus size={18} />
+                  </button>
+                )}
+              </div>
+            )
+          })}
+      </div>
+      <h3 className="text-lg mb-2">Received</h3>
+      <div className="space-y-2">
+        {receivedRequests.length === 0 ? (
+          <p className="text-sm text-gray-500">No requests.</p>
+        ) : (
+          receivedRequests.map((req) => (
+            <div
+              key={req.id}
+              className="flex items-center justify-between p-2 border rounded bg-[#F4D8CD] text-[#3A2E39]"
+            >
+              <span>{req.from}</span>
+              <div className="space-x-2">
+                <button
+                  onClick={() => onRespondFriendRequest(req.id, "accepted")}
+                  className="px-3 py-1 bg-[#EDB183] text-[#3A2E39] rounded hover:bg-[#F15152] hover:text-white transition-colors"
+                >
+                  <UserPlus size={18} />
+                </button>
+                <button
+                  onClick={() => onRespondFriendRequest(req.id, "declined")}
+                  className="px-3 py-1 bg-[#EDB183] text-[#3A2E39] rounded hover:bg-[#F15152] hover:text-white transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  )
 }
 
 function HomeContent() {
@@ -547,267 +810,7 @@ function HomeContent() {
   )
 }
 
-function PostCard({
-  post,
-  onToggleLike,
-  onAddComment,
-  onLikeComment,
-}: {
-  post: Post
-  onToggleLike: () => void
-  onAddComment: (commentText: string) => void
-  onLikeComment: (commentId: number) => void
-}) {
-  const [commentInput, setCommentInput] = useState("")
-  const handleCommentSubmit = (e: FormEvent) => {
-    e.preventDefault()
-    onAddComment(commentInput)
-    setCommentInput("")
-  }
-  return (
-    <div className="p-6 bg-white rounded-xl shadow-lg border-l-4 border-[#EDB183]">
-      <div className="flex items-center space-x-3 mb-4">
-        <div className="w-12 h-12 rounded-full bg-[#EDB183] flex items-center justify-center">
-          <User size={24} className="text-[#3A2E39]" />
-        </div>
-        <span className="text-xl font-bold text-[#3A2E39]">{post.user}</span>
-      </div>
-      <p className="text-xl text-[#3A2E39] mb-4">{post.content}</p>
-      <div className="space-y-3 mb-4">
-        {post.comments.map((com) => (
-          <div key={com.id} className="flex items-start space-x-3 p-3 bg-gray-100 rounded-md">
-            <div className="w-8 h-8 rounded-full bg-[#EDB183] flex items-center justify-center">
-              <User size={16} className="text-[#3A2E39]" />
-            </div>
-            <div className="flex flex-col flex-grow">
-              <p className="text-sm font-semibold text-[#3A2E39]">{com.user}</p>
-              <p className="text-sm text-gray-700">{com.text}</p>
-              <div className="flex items-center space-x-1 mt-1">
-                <Heart
-                  size={20}
-                  onClick={() => onLikeComment(com.id)}
-                  className="cursor-pointer rounded-full p-1 transition-colors duration-300 hover:bg-pink-600 hover:bg-opacity-20"
-                  fill={com.liked ? "#F15152" : "none"}
-                  stroke="#F15152"
-                />
-                <span className="text-xs text-gray-600">{formatLikes(com.likes)}</span>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-      <form onSubmit={handleCommentSubmit} className="flex space-x-3 mb-4">
-        <input
-          type="text"
-          className="flex-1 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#EDB183] text-[#3A2E39]"
-          placeholder="Add a comment..."
-          value={commentInput}
-          onChange={(e) => setCommentInput(e.target.value)}
-        />
-        <button
-          type="submit"
-          className="flex items-center justify-center px-4 py-3 bg-[#EDB183] text-[#3A2E39] rounded-lg shadow hover:bg-[#F15152] hover:text-white transition-colors"
-        >
-          <Send size={20} />
-        </button>
-      </form>
-      <div className="flex items-center justify-between border-t border-gray-200 pt-3">
-        <div className="flex items-center space-x-6">
-          <div className="flex items-center space-x-1">
-            <Heart
-              size={30}
-              onClick={onToggleLike}
-              className="cursor-pointer rounded-full p-1 transition-colors duration-300 hover:bg-pink-600 hover:bg-opacity-20"
-              fill={post.liked ? "#F15152" : "none"}
-              stroke="#F15152"
-            />
-            <span className="text-sm text-[#3A2E39]">{formatLikes(post.likes)}</span>
-          </div>
-          <div className="flex items-center space-x-1">
-            <MessageCircle size={20} className="text-[#3A2E39]" />
-            <span className="text-sm text-[#3A2E39]">{post.comments.length}</span>
-          </div>
-        </div>
-        <span className="text-sm text-gray-500">{timeSince(post.createdAt)} ago</span>
-      </div>
-    </div>
-  )
-}
-
-type MessagesPanelProps = {
-  availableUsers: string[]
-  onSendMessage: (to: string, content: string) => void
-  onClose: () => void
-}
-
-function MessagesPanel({ availableUsers, onSendMessage, onClose }: MessagesPanelProps) {
-  const { privateMessages } = useAppContext()
-  const [selectedRecipient, setSelectedRecipient] = useState(availableUsers.find((u) => u !== "You") || "")
-  const [messageInput, setMessageInput] = useState("")
-
-  const conversation = privateMessages.filter(
-    (msg) =>
-      (msg.from === "You" && msg.to === selectedRecipient) || (msg.from === selectedRecipient && msg.to === "You"),
-  )
-
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault()
-    if (!messageInput.trim()) return
-    onSendMessage(selectedRecipient, messageInput)
-    setMessageInput("")
-  }
-
-  return (
-    <div className="flex flex-col h-full p-4 z-50">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold">Messages</h2>
-        <button
-          onClick={onClose}
-          className="px-2 py-1 bg-[#EDB183] text-[#3A2E39] rounded hover:bg-[#F15152] hover:text-white transition-colors"
-        >
-          <X size={20} />
-        </button>
-      </div>
-
-      <select
-        className="mb-4 p-2 border rounded bg-[#F4D8CD] text-[#3A2E39]"
-        value={selectedRecipient}
-        onChange={(e) => setSelectedRecipient(e.target.value)}
-      >
-        {availableUsers
-          .filter((u) => u !== "You")
-          .map((user) => (
-            <option key={user} value={user}>
-              {user}
-            </option>
-          ))}
-      </select>
-
-      <div className="flex-1 overflow-y-auto space-y-2 pr-1 mb-4">
-        {conversation.map((msg) => (
-          <div
-            key={msg.id}
-            className={`p-2 rounded max-w-[80%] ${
-              msg.from === "You"
-                ? "ml-auto text-right bg-[#EDB183] text-[#3A2E39]"
-                : "mr-auto text-left bg-[#F15152] text-white"
-            }`}
-          >
-            <p className="text-sm break-words">{msg.content}</p>
-            <span className="text-xs block mt-1 opacity-70">{new Date(msg.createdAt).toLocaleTimeString()}</span>
-          </div>
-        ))}
-      </div>
-
-      <form onSubmit={handleSubmit} className="mt-auto sticky bottom-0 bg-[#1E555C] pt-2">
-        <div className="flex space-x-2">
-          <input
-            type="text"
-            className="flex-1 p-2 border rounded bg-[#F4D8CD] text-[#3A2E39]"
-            placeholder="Type your message..."
-            value={messageInput}
-            onChange={(e) => setMessageInput(e.target.value)}
-          />
-          <button
-            type="submit"
-            className="p-2 bg-[#EDB183] text-[#3A2E39] rounded hover:bg-[#F15152] hover:text-white transition-colors"
-          >
-            <Send size={20} />
-          </button>
-        </div>
-      </form>
-    </div>
-  )
-}
-
-type FriendRequestsPanelProps = {
-  availableUsers: string[]
-  onSendFriendRequest: (to: string) => void
-  onRespondFriendRequest: (requestId: number, response: "accepted" | "declined") => void
-  onClose: () => void
-}
-
-function FriendRequestsPanel({
-  availableUsers,
-  onSendFriendRequest,
-  onRespondFriendRequest,
-  onClose,
-}: FriendRequestsPanelProps) {
-  const { friendRequests } = useAppContext()
-  const sentRequests = friendRequests.filter((req) => req.from === "You")
-  const receivedRequests = friendRequests.filter((req) => req.to === "You" && req.status === "pending")
-  return (
-    <div className="flex flex-col h-full p-4">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold">Friend Requests</h2>
-        <button
-          onClick={onClose}
-          className="px-2 py-1 bg-[#EDB183] text-[#3A2E39] rounded hover:bg-[#F15152] hover:text-white transition-colors"
-        >
-          <X size={20} />
-        </button>
-      </div>
-      <h3 className="text-lg mb-2">Send Request</h3>
-      <div className="space-y-2 mb-4">
-        {availableUsers
-          .filter((u) => u !== "You")
-          .map((user) => {
-            const request = sentRequests.find((r) => r.to === user)
-            return (
-              <div
-                key={user}
-                className="flex items-center justify-between p-2 border rounded bg-[#F4D8CD] text-[#3A2E39]"
-              >
-                <span>{user}</span>
-                {request ? (
-                  <span className="text-gray-500 text-sm">
-                    {request.status === "pending" ? "Pending" : request.status}
-                  </span>
-                ) : (
-                  <button
-                    onClick={() => onSendFriendRequest(user)}
-                    className="px-3 py-1 bg-[#EDB183] text-[#3A2E39] rounded hover:bg-[#F15152] hover:text-white transition-colors"
-                  >
-                    <UserPlus size={18} />
-                  </button>
-                )}
-              </div>
-            )
-          })}
-      </div>
-      <h3 className="text-lg mb-2">Received</h3>
-      <div className="space-y-2">
-        {receivedRequests.length === 0 ? (
-          <p className="text-sm text-gray-500">No requests.</p>
-        ) : (
-          receivedRequests.map((req) => (
-            <div
-              key={req.id}
-              className="flex items-center justify-between p-2 border rounded bg-[#F4D8CD] text-[#3A2E39]"
-            >
-              <span>{req.from}</span>
-              <div className="space-x-2">
-                <button
-                  onClick={() => onRespondFriendRequest(req.id, "accepted")}
-                  className="px-3 py-1 bg-[#EDB183] text-[#3A2E39] rounded hover:bg-[#F15152] hover:text-white transition-colors"
-                >
-                  <UserPlus size={18} />
-                </button>
-                <button
-                  onClick={() => onRespondFriendRequest(req.id, "declined")}
-                  className="px-3 py-1 bg-[#EDB183] text-[#3A2E39] rounded hover:bg-[#F15152] hover:text-white transition-colors"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  )
-}
-
+// This is the only exported component - the page itself
 export default function Home() {
   return (
     <AppProvider>
