@@ -638,7 +638,7 @@ function AppProvider({ children }: { children: ReactNode }) {
         }
         setPosts((prev) => [newPost, ...prev])
         setToast("Post created successfully.")
-      } catch (error) {
+      } catch  {
         setError("Failed to create post. Please try again.")
       }
     },
@@ -650,7 +650,7 @@ function AppProvider({ children }: { children: ReactNode }) {
       setPosts((prev) =>
         prev.map((p) => (p.id === postId ? { ...p, liked: !p.liked, likes: p.liked ? p.likes - 1 : p.likes + 1 } : p)),
       )
-    } catch (error) {
+    } catch {
       setError("Failed to update like status. Please try again.")
     }
   }, [])
@@ -672,7 +672,7 @@ function AppProvider({ children }: { children: ReactNode }) {
         }
         setPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, comments: [...p.comments, newComment] } : p)))
         setToast("Comment added.")
-      } catch (error) {
+      } catch {
         setError("Failed to add comment. Please try again.")
       }
     },
@@ -699,7 +699,7 @@ function AppProvider({ children }: { children: ReactNode }) {
           return post
         }),
       )
-    } catch (error) {
+    } catch {
       setError("Failed to update comment like status.")
     }
   }, [])
@@ -728,7 +728,7 @@ function AppProvider({ children }: { children: ReactNode }) {
           setToast("Message sent.")
           setActionLoading({ type: null, id: null })
         }, 500)
-      } catch (error) {
+      } catch {
         setError("Failed to send message. Please try again.")
         setActionLoading({ type: null, id: null })
       }
@@ -767,7 +767,7 @@ function AppProvider({ children }: { children: ReactNode }) {
         }
         setFriendRequests((prev) => [...prev, newRequest])
         setToast("Friend request sent.")
-      } catch (error) {
+      } catch {
         setError("Failed to send friend request. Please try again.")
       }
     },
@@ -779,7 +779,7 @@ function AppProvider({ children }: { children: ReactNode }) {
       try {
         setFriendRequests((prev) => prev.map((req) => (req.id === requestId ? { ...req, status: response } : req)))
         setToast(`Friend request ${response}.`)
-      } catch (error) {
+      } catch {
         setError(`Failed to ${response} friend request. Please try again.`)
       }
     },
@@ -871,7 +871,7 @@ function HomeContent() {
                     key={post.id}
                     post={post}
                     onToggleLike={() => togglePostLike(post.id)}
-                    onAddComment={(text) => addComment(post.id, text)}
+                    onAddComment={(text) => addComment(post.id, String(text))}
                     onLikeComment={(commentId) => likeComment(post.id, commentId)}
                   />
                 ))}
